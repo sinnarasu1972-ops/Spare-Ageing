@@ -15,6 +15,9 @@ import sys
 import numpy as np
 from functools import lru_cache
 import hashlib
+import webbrowser
+import subprocess
+import platform
 
 def clean_for_json(df):
     """Clean dataframe for JSON serialization by replacing NaN with None"""
@@ -55,8 +58,22 @@ def parse_date(date_str):
         pass
     return None
 
-# Part 1: Process Excel to CSV with enhanced logic
+# ============================================================================
+# PART 1: EXCEL TO CSV PROCESSING WITH ALL CONDITIONS
+# ============================================================================
+
 def process_excel_to_csv():
+    """
+    MAIN PROCESSING FUNCTION
+    Reads Excel file and creates CSV with calculated columns
+    
+    CONDITIONS IMPLEMENTED:
+    1. Aging Categories: 0-90, 91-180, 181-365, 366-730, 730+ days
+    2. Dead Stock Logic: Stock > 0 AND No issue in last 365 days
+    3. Month Categorization: Current, Last, Last-to-Last Month
+    4. GNDP Calculation: Stock value at GNDP price
+    """
+    
     input_file = "./Spares Ageing Report.xlsx"
     output_csv = "./Spares Ageing Report_Processed.csv"
     
@@ -89,6 +106,11 @@ def process_excel_to_csv():
     print(f"Last Month: {last_month_start} to {last_month_end}")
     print(f"Last to Last Month: {last_to_last_month_start} to {last_to_last_month_end}")
     
+    # ========================================================================
+    # CONDITION 1: CATEGORIZE AGING BASED ON DAYS
+    # Days mapping: 
+    #   0-90, 91-180, 181-365, 366-730, 730+
+    # ========================================================================
     def categorize_aging(date_str):
         if pd.isna(date_str) or date_str == "-" or str(date_str).strip() == "":
             return "730 and above"
@@ -115,6 +137,9 @@ def process_excel_to_csv():
         except:
             return "730 and above"
     
+    # ========================================================================
+    # CONDITION 2: CATEGORIZE BY MONTH (Current, Last, Last-to-Last)
+    # ========================================================================
     def categorize_by_month(date_str):
         if pd.isna(date_str) or date_str == "-" or str(date_str).strip() == "":
             return "730 and above"
@@ -124,6 +149,7 @@ def process_excel_to_csv():
             if date_obj is None:
                 return "730 and above"
             
+            # Check exact month matches
             if date_obj >= current_month_start:
                 return "Current Month"
             elif last_month_start <= date_obj <= last_month_end:
@@ -131,6 +157,7 @@ def process_excel_to_csv():
             elif last_to_last_month_start <= date_obj <= last_to_last_month_end:
                 return "Last to Last Month"
             else:
+                # Fallback to day-based aging
                 days_diff = (today - date_obj).days
                 if days_diff < 0:
                     return "Current Month"
@@ -147,6 +174,13 @@ def process_excel_to_csv():
         except:
             return "730 and above"
     
+    # ========================================================================
+    # CONDITION 3: DEAD STOCK IDENTIFICATION LOGIC
+    # Dead Stock = 
+    #   1. Stock Qty > 0
+    #   2. No issue in last 365 days OR last issue date < purchase date
+    #   3. Purchase date in specific past months
+    # ========================================================================
     def identify_dead_stock(last_purchase_str, last_issue_str, last_issue_qty, stock_qty):
         """
         Dead Stock = No issue in last 365 days AND Stock Qty > 0
@@ -157,9 +191,11 @@ def process_excel_to_csv():
         except:
             stock = 0
         
+        # CONDITION 3.1: Stock must be > 0
         if stock <= 0:
             return False, "Not Dead Stock (No Stock)"
         
+        # CONDITION 3.2: Check if no issue in last 365 days
         if pd.isna(last_issue_str) or last_issue_str == "-" or str(last_issue_str).strip() == "":
             issue_date_obj = None
             issue_days_diff = 999999
@@ -173,12 +209,15 @@ def process_excel_to_csv():
             except:
                 issue_days_diff = 999999
         
+        # CONDITION 3.3: If issued in last 365 days, NOT dead stock
         if issue_days_diff <= 365:
             return False, "Not Dead Stock (Recent Issue)"
         
+        # CONDITION 3.4: If no purchase date, mark as dead stock (Earlier)
         if pd.isna(last_purchase_str) or last_purchase_str == "-" or str(last_purchase_str).strip() == "":
             return True, "Earlier"
         
+        # CONDITION 3.5: Categorize by purchase month (Last Year comparisons)
         try:
             purchase_date_obj = parse_date(last_purchase_str)
             
@@ -208,6 +247,9 @@ def process_excel_to_csv():
         except:
             return True, "Earlier"
     
+    # ========================================================================
+    # STEP 1: FIND REQUIRED COLUMNS
+    # ========================================================================
     print("\nSearching for required columns...")
     
     last_issue_col = None
@@ -247,11 +289,17 @@ def process_excel_to_csv():
             part_category_col = col
             break
     
+    # ========================================================================
+    # STEP 2: CREATE AGING CATEGORIES
+    # ========================================================================
     print("\nCreating aging categories...")
     df['Movement Category I (2)'] = df[last_issue_col].apply(categorize_aging)
     df['Movement Category P (2)'] = df[last_purchase_col].apply(categorize_aging)
     df['Purchase Month Category'] = df[last_purchase_col].apply(categorize_by_month)
     
+    # ========================================================================
+    # STEP 3: IDENTIFY DEAD STOCK FOR ALL PARTS
+    # ========================================================================
     print("\nCreating Dead Stock categories for ALL part categories...")
     
     stock_qty_col = None
@@ -275,6 +323,9 @@ def process_excel_to_csv():
     print(f"✓ Dead Stock calculation applied to ALL part categories")
     print(f"\nTotal Dead Stock Parts (All Categories): {df['Is Dead Stock'].sum()}")
     
+    # ========================================================================
+    # STEP 4: CALCULATE GNDP VALUE
+    # ========================================================================
     gndp_column = None
     for col in df.columns:
         if 'stock' in str(col).lower() and 'gndp' in str(col).lower():
@@ -288,6 +339,9 @@ def process_excel_to_csv():
     else:
         total_gndp = 0
     
+    # ========================================================================
+    # STEP 5: SAVE TO CSV
+    # ========================================================================
     try:
         df.to_csv(output_csv, index=False)
         print(f"\n✓ Processed data saved to CSV: {output_csv}")
@@ -297,9 +351,14 @@ def process_excel_to_csv():
     
     return output_csv, total_gndp, gndp_column
 
+# ============================================================================
+# FASTAPI APPLICATION & ENDPOINTS
+# ============================================================================
+
 app = FastAPI()
 
 def format_indian_number(num):
+    """Format number in Indian numbering system (1,00,000 format)"""
     if num is None or pd.isna(num):
         return "0"
     try:
@@ -320,6 +379,52 @@ def format_indian_number(num):
     except:
         return "0"
 
+# ============================================================================
+# HELPER FUNCTION: APPLY FILTERS VECTORIZED
+# ============================================================================
+
+def apply_filters_vectorized(filtered_df, movement_category, part_category, location, abc_category, ris, part_number):
+    """
+    Apply all filters at once using vectorized operations
+    
+    CONDITIONS:
+    1. movement_category: Filter by aging category (0-90, 91-180, etc.)
+    2. part_category: Filter by part category
+    3. location: Filter by location
+    4. abc_category: Filter by ABC classification
+    5. ris: Filter by RIS value
+    6. part_number: Search by part number (fuzzy match)
+    """
+    
+    if movement_category:
+        categories_list = movement_category.split(',')
+        filtered_df = filtered_df[filtered_df['Movement Category P (2)'].isin(categories_list)]
+    
+    if part_category and part_category_col in filtered_df.columns:
+        categories_list = part_category.split(',')
+        filtered_df = filtered_df[filtered_df[part_category_col].isin(categories_list)]
+    
+    if location and location_col in filtered_df.columns:
+        locations_list = location.split(',')
+        filtered_df = filtered_df[filtered_df[location_col].isin(locations_list)]
+    
+    if abc_category and abc_col in filtered_df.columns:
+        categories_list = abc_category.split(',')
+        filtered_df = filtered_df[filtered_df[abc_col].isin(categories_list)]
+    
+    if ris and ris_col in filtered_df.columns:
+        ris_list = ris.split(',')
+        filtered_df = filtered_df[filtered_df[ris_col].isin(ris_list)]
+    
+    if part_number and part_no_col in filtered_df.columns:
+        filtered_df = filtered_df[filtered_df[part_no_col].astype(str).str.contains(part_number, case=False, na=False)]
+    
+    return filtered_df
+
+# ============================================================================
+# HTML TEMPLATE WITH LOADING SCREEN & LOGO
+# ============================================================================
+
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="en">
@@ -331,21 +436,150 @@ HTML_TEMPLATE = """
     <link rel="stylesheet" href="/static/style.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-select@1.14.0-beta2/dist/css/bootstrap-select.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+    <style>
+        /* ================================================================ */
+        /* LOADING SCREEN WITH LOGO - ANIMATION STYLES */
+        /* ================================================================ */
+        .loading-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            flex-direction: column;
+        }
+
+        .loading-screen.hidden {
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.5s ease-out, visibility 0.5s ease-out;
+        }
+
+        .spinner-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 2rem;
+        }
+
+        .logo-container {
+            margin-bottom: 1rem;
+            animation: slideDown 0.8s ease-out;
+        }
+
+        .logo-container img {
+            max-width: 200px;
+            height: auto;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            border-radius: 10px;
+            background: white;
+            padding: 10px;
+        }
+
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translateY(-30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .spinner {
+            width: 60px;
+            height: 60px;
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-top: 4px solid white;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .loading-text {
+            color: white;
+            font-size: 1.2rem;
+            font-weight: 500;
+            text-align: center;
+        }
+
+        .loading-subtext {
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 0.9rem;
+            margin-top: 0.5rem;
+        }
+
+        .dot-animation {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            background-color: rgba(255, 255, 255, 0.6);
+            border-radius: 50%;
+            animation: dotAnimation 1.4s infinite;
+            margin: 0 4px;
+        }
+
+        .dot-animation:nth-child(1) { animation-delay: -0.32s; }
+        .dot-animation:nth-child(2) { animation-delay: -0.16s; }
+
+        @keyframes dotAnimation {
+            0%, 60%, 100% { opacity: 0.3; transform: scale(1); }
+            30% { opacity: 1; transform: scale(1.2); }
+        }
+
+        .company-name {
+            color: white;
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-top: 1rem;
+            letter-spacing: 2px;
+        }
+    </style>
 </head>
 <body>
-    <div class="container-fluid">
+    <!-- Loading Screen with Logo -->
+    <div class="loading-screen" id="loadingScreen">
+        <div class="spinner-container">
+            <div class="logo-container">
+                <img src="file:///D:/Spare%20Ageing%20Render/Image/Unnati.jpg" alt="Unnati Motors Logo">
+            </div>
+            <div class="company-name">UNNATI MOTORS</div>
+            <div class="spinner"></div>
+            <div>
+                <div class="loading-text">Loading Spare Parts Dashboard</div>
+                <div class="loading-subtext">
+                    <span class="dot-animation"></span>
+                    <span class="dot-animation"></span>
+                    <span class="dot-animation"></span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container-fluid" id="mainContent" style="display:none;">
         <div class="row">
             <div class="col-12">
                 <h1 class="text-center my-4">Unnati Motors Mahindra Spare Parts Ageing Dashboard</h1>
             </div>
         </div>
         
+        <!-- DEAD STOCK MONITOR -->
         <div class="row mb-3">
             <div class="col-12">
                 <div class="card bg-danger text-white">
                     <div class="card-body py-3">
                         <h4 class="card-title mb-3">😰 Dead Stock Monitor</h4>
                         <div class="row g-2">
+                            <!-- Current Month Complete -->
                             <div class="col-lg-2-5 col-md-6 col-sm-6 col-12">
                                 <div class="card bg-white text-dark h-100">
                                     <div class="card-body py-2">
@@ -367,6 +601,8 @@ HTML_TEMPLATE = """
                                     </div>
                                 </div>
                             </div>
+
+                            <!-- Last Month Dead Stock -->
                             <div class="col-lg-2-5 col-md-6 col-sm-6 col-12">
                                 <div class="card bg-white text-dark h-100" style="border-left: 5px solid #6c5ce7;">
                                     <div class="card-body py-2">
@@ -377,6 +613,8 @@ HTML_TEMPLATE = """
                                     </div>
                                 </div>
                             </div>
+
+                            <!-- Last to Last Month -->
                             <div class="col-lg-2-5 col-md-6 col-sm-6 col-12">
                                 <div class="card bg-white text-dark h-100" style="border-left: 5px solid #00b894;">
                                     <div class="card-body py-2">
@@ -387,6 +625,8 @@ HTML_TEMPLATE = """
                                     </div>
                                 </div>
                             </div>
+
+                            <!-- Total Dead Stock -->
                             <div class="col-lg-2-5 col-md-6 col-sm-6 col-12">
                                 <div class="card bg-white text-dark h-100">
                                     <div class="card-body py-2">
@@ -397,6 +637,8 @@ HTML_TEMPLATE = """
                                     </div>
                                 </div>
                             </div>
+
+                            <!-- Last Month Liquidation -->
                             <div class="col-lg-2-5 col-md-6 col-sm-6 col-12">
                                 <div class="card bg-white text-dark h-100" style="border-left: 5px solid #ff9800;">
                                     <div class="card-body py-2">
@@ -422,6 +664,7 @@ HTML_TEMPLATE = """
             }
         </style>
         
+        <!-- GNDP VALUE & FILTERS -->
         <div class="row mb-3">
             <div class="col-lg-3 col-md-6 mb-2">
                 <div class="card bg-primary text-white h-100">
@@ -472,6 +715,7 @@ HTML_TEMPLATE = """
             </div>
         </div>
         
+        <!-- MORE FILTERS -->
         <div class="row mb-3">
             <div class="col-lg-3 col-md-6 mb-2">
                 <div class="card h-100">
@@ -536,6 +780,7 @@ HTML_TEMPLATE = """
             </div>
         </div>
         
+        <!-- LOCATION WISE SUMMARY TABLE -->
         <div class="row mb-3">
             <div class="col-12">
                 <div class="card">
@@ -593,6 +838,7 @@ HTML_TEMPLATE = """
             </div>
         </div>
         
+        <!-- LOCATION WISE PART CATEGORY TABLE -->
         <div class="row mb-3">
             <div class="col-12">
                 <div class="card">
@@ -626,6 +872,7 @@ HTML_TEMPLATE = """
             </div>
         </div>
         
+        <!-- DATA TABLE -->
         <div class="row mb-2">
             <div class="col-12">
                 <div class="card">
@@ -695,10 +942,24 @@ HTML_TEMPLATE = """
         </div>
     </div>
 
+    <!-- SCRIPTS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap-select@1.14.0-beta2/dist/js/bootstrap-select.min.js"></script>
     <script>
+        // ================================================================
+        // HIDE LOADING SCREEN WHEN DATA IS LOADED
+        // ================================================================
+        function hideLoadingScreen() {
+            const loadingScreen = document.getElementById('loadingScreen');
+            const mainContent = document.getElementById('mainContent');
+            
+            if (loadingScreen) {
+                loadingScreen.classList.add('hidden');
+                mainContent.style.display = 'block';
+            }
+        }
+
         $(document).ready(function() {
             let currentPage = 1;
             const perPage = 50;
@@ -707,6 +968,9 @@ HTML_TEMPLATE = """
             
             $('.selectpicker').selectpicker();
             
+            // ================================================================
+            // FORMAT NUMBER IN INDIAN FORMAT (1,00,000)
+            // ================================================================
             function formatIndianNumber(num) {
                 if (num === null || num === undefined || isNaN(num)) return '0';
                 const actualValue = Math.round(num * 100000);
@@ -714,10 +978,13 @@ HTML_TEMPLATE = """
                 let lastThree = numStr.substring(numStr.length - 3);
                 let otherNumbers = numStr.substring(0, numStr.length - 3);
                 if (otherNumbers !== '') lastThree = ',' + lastThree;
-                let result = otherNumbers.replace(/\\B(?=(\\d{2})+(?!\\d))/g, ',') + lastThree;
+                let result = otherNumbers.replace(/\B(?=(\d{2})+(?!\d))/g, ',') + lastThree;
                 return actualValue < 0 ? '-' + result : result;
             }
             
+            // ================================================================
+            // GET FILTER VALUES FROM UI
+            // ================================================================
             function getFilters() {
                 return {
                     movementCategory: $('#movementCategory').val() || [],
@@ -729,6 +996,9 @@ HTML_TEMPLATE = """
                 };
             }
             
+            // ================================================================
+            // BUILD QUERY STRING FROM FILTERS
+            // ================================================================
             function buildQueryString(filters) {
                 const params = new URLSearchParams();
                 if (filters.movementCategory.length) params.append('movement_category', filters.movementCategory.join(','));
@@ -740,6 +1010,9 @@ HTML_TEMPLATE = """
                 return params.toString();
             }
             
+            // ================================================================
+            // LOAD DEAD STOCK SUMMARY (WITH FILTER CONDITIONS)
+            // ================================================================
             function loadDeadStockSummary() {
                 const filters = getFilters();
                 const queryString = buildQueryString(filters);
@@ -766,6 +1039,9 @@ HTML_TEMPLATE = """
                 });
             }
             
+            // ================================================================
+            // LOAD LOCATION WISE SUMMARY (ALL AGING CATEGORIES)
+            // ================================================================
             function loadSummary() {
                 const filters = getFilters();
                 const queryString = buildQueryString(filters);
@@ -841,6 +1117,9 @@ HTML_TEMPLATE = """
                 });
             }
             
+            // ================================================================
+            // LOAD PART CATEGORY SUMMARY (WITH FILTERS)
+            // ================================================================
             function loadPartCategorySummary() {
                 const filters = getFilters();
                 const queryString = buildQueryString(filters);
@@ -884,6 +1163,9 @@ HTML_TEMPLATE = """
                 });
             }
             
+            // ================================================================
+            // UPDATE GNDP VALUE (STOCK AT GNDP PRICE)
+            // ================================================================
             function updateGNDP() {
                 const filters = getFilters();
                 const queryString = buildQueryString(filters);
@@ -896,6 +1178,9 @@ HTML_TEMPLATE = """
                 });
             }
             
+            // ================================================================
+            // LOAD DATA TABLE WITH PAGINATION (WITH ALL FILTERS)
+            // ================================================================
             function loadData() {
                 const filters = getFilters();
                 const queryString = buildQueryString(filters);
@@ -951,38 +1236,48 @@ HTML_TEMPLATE = """
                         loadSummary();
                         loadPartCategorySummary();
                         loadDeadStockSummary();
+                        
+                        // Hide loading screen after data is loaded
+                        hideLoadingScreen();
                     }
                 });
             }
             
-            function updatePagination(totalPages, currentPage) {
+            // ================================================================
+            // UPDATE PAGINATION CONTROLS
+            // ================================================================
+            function updatePagination(totalPages, currentPageNum) {
                 $('#pagination').empty();
                 if (totalPages === 0) return;
                 
                 $('#pagination').append(`
-                    <li class="page-item ${currentPage === 1 ? 'disabled' : ''}">
-                        <a class="page-link" href="#" data-page="${currentPage - 1}">Previous</a>
+                    <li class="page-item ${currentPageNum === 1 ? 'disabled' : ''}">
+                        <a class="page-link" href="#" data-page="${currentPageNum - 1}">Previous</a>
                     </li>
                 `);
                 
                 for (let i = 1; i <= totalPages; i++) {
-                    if (i === 1 || i === totalPages || (i >= currentPage - 2 && i <= currentPage + 2)) {
+                    if (i === 1 || i === totalPages || (i >= currentPageNum - 2 && i <= currentPageNum + 2)) {
                         $('#pagination').append(`
-                            <li class="page-item ${i === currentPage ? 'active' : ''}">
+                            <li class="page-item ${i === currentPageNum ? 'active' : ''}">
                                 <a class="page-link" href="#" data-page="${i}">${i}</a>
                             </li>
                         `);
-                    } else if (i === currentPage - 3 || i === currentPage + 3) {
+                    } else if (i === currentPageNum - 3 || i === currentPageNum + 3) {
                         $('#pagination').append(`<li class="page-item disabled"><a class="page-link" href="#">...</a></li>`);
                     }
                 }
                 
                 $('#pagination').append(`
-                    <li class="page-item ${currentPage === totalPages ? 'disabled' : ''}">
-                        <a class="page-link" href="#" data-page="${currentPage + 1}">Next</a>
+                    <li class="page-item ${currentPageNum === totalPages ? 'disabled' : ''}">
+                        <a class="page-link" href="#" data-page="${currentPageNum + 1}">Next</a>
                     </li>
                 `);
             }
+            
+            // ================================================================
+            // EVENT LISTENERS FOR FILTERS
+            // ================================================================
             
             $('#movementCategory, #partCategory, #location, #abcCategory, #ris').change(function() {
                 if (autoRefresh) {
@@ -1012,6 +1307,9 @@ HTML_TEMPLATE = """
                 loadData();
             });
             
+            // ================================================================
+            // PAGINATION CLICK HANDLER
+            // ================================================================
             $(document).on('click', '.page-link', function(e) {
                 e.preventDefault();
                 const page = parseInt($(this).data('page'));
@@ -1020,6 +1318,10 @@ HTML_TEMPLATE = """
                     loadData();
                 }
             });
+            
+            // ================================================================
+            // DOWNLOAD BUTTONS
+            // ================================================================
             
             $('#downloadCsv').click(function() {
                 const filters = getFilters();
@@ -1038,6 +1340,10 @@ HTML_TEMPLATE = """
                 const queryString = buildQueryString(filters);
                 window.location.href = `/download-part-category-csv?${queryString}`;
             });
+            
+            // ================================================================
+            // DEAD STOCK EXPORT BUTTONS
+            // ================================================================
             
             $('#btnDeadStockCurrent').click(function() {
                 const filters = getFilters();
@@ -1069,6 +1375,10 @@ HTML_TEMPLATE = """
                 window.location.href = `/download-last-month-liquidation-csv?${queryString}`;
             });
             
+            // ================================================================
+            // CLEAR ALL FILTERS
+            // ================================================================
+            
             $('#clearFilters').click(function() {
                 autoRefresh = true;
                 $('.selectpicker').selectpicker('deselectAll');
@@ -1077,6 +1387,9 @@ HTML_TEMPLATE = """
                 loadData();
             });
             
+            // ================================================================
+            // LOAD DATA ON PAGE READY
+            // ================================================================
             loadData();
         });
     </script>
@@ -1084,8 +1397,12 @@ HTML_TEMPLATE = """
 </html>
 """
 
+# ============================================================================
+# MAIN STARTUP PROCESS
+# ============================================================================
+
 print("\n" + "=" * 70)
-print("STARTING SPARE PARTS AGEING DASHBOARD (OPTIMIZED)")
+print("STARTING SPARE PARTS AGEING DASHBOARD (OPTIMIZED WITH LOGO)")
 print("=" * 70)
 
 csv_file, total_gndp, gndp_column = process_excel_to_csv()
@@ -1103,10 +1420,14 @@ except Exception as e:
     print(f"\nERROR loading processed CSV: {e}")
     sys.exit(1)
 
-# OPTIMIZATION: Find all columns ONCE at startup
+# ============================================================================
+# PRE-COMPUTE COLUMN NAMES & UNIQUE VALUES (OPTIMIZATION)
+# ============================================================================
+
 print("\n🚀 OPTIMIZATION: Pre-computing column names at startup...")
 print("   (This happens only once, not on every request)")
 
+# Find column names
 last_issue_col = None
 for col in df.columns:
     if 'last' in str(col).lower() and 'issue' in str(col).lower() and 'date' in str(col).lower():
@@ -1161,30 +1482,26 @@ for col in df.columns:
         stock_qty_col = col
         break
 
-# OPTIMIZATION: Create lookup sets for faster filtering
+# Pre-compute unique values
 print("✓ Pre-computing unique values for filters...")
 locations = sorted([x for x in df[location_col].unique().tolist() if pd.notna(x)]) if location_col in df.columns else []
-locations_set = set(locations)
-
 abc_categories = sorted([x for x in df[abc_col].unique().tolist() if pd.notna(x)]) if abc_col and abc_col in df.columns else []
-abc_categories_set = set(abc_categories)
-
 ris_values = sorted([x for x in df[ris_col].unique().tolist() if pd.notna(x)]) if ris_col and ris_col in df.columns else []
-ris_values_set = set(ris_values)
-
 part_categories = sorted([x for x in df[part_category_col].unique().tolist() if pd.notna(x)]) if part_category_col in df.columns else []
-part_categories_set = set(part_categories)
 
 movement_order = ["0 to 90 days", "91 to 180 days", "181 to 365 days", "366 to 730 days", "730 and above"]
 unique_movement = [x for x in df['Movement Category P (2)'].unique().tolist() if pd.notna(x)]
 movement_categories = [cat for cat in movement_order if cat in unique_movement]
-movement_categories_set = set(movement_categories)
 
 print(f"\n✓ Configuration Complete:")
 print(f"  - Total Records: {len(df):,}")
 print(f"  - Dead Stock Parts: {df['Is Dead Stock'].sum():,}")
 print(f"  - Locations: {len(locations)}")
 print(f"  - Part Categories: {len(part_categories)}")
+
+# ============================================================================
+# CREATE STATIC FOLDER & CSS
+# ============================================================================
 
 if not os.path.exists("static"):
     os.makedirs("static")
@@ -1229,34 +1546,9 @@ with open("static/style.css", "w") as f:
     .badge { font-size: 0.75rem; }
     """)
 
-# OPTIMIZATION: Helper function to build filter mask
-def apply_filters_vectorized(filtered_df, movement_category, part_category, location, abc_category, ris, part_number):
-    """Apply all filters at once using vectorized operations"""
-    
-    if movement_category:
-        categories_list = movement_category.split(',')
-        filtered_df = filtered_df[filtered_df['Movement Category P (2)'].isin(categories_list)]
-    
-    if part_category and part_category_col in filtered_df.columns:
-        categories_list = part_category.split(',')
-        filtered_df = filtered_df[filtered_df[part_category_col].isin(categories_list)]
-    
-    if location and location_col in filtered_df.columns:
-        locations_list = location.split(',')
-        filtered_df = filtered_df[filtered_df[location_col].isin(locations_list)]
-    
-    if abc_category and abc_col in filtered_df.columns:
-        categories_list = abc_category.split(',')
-        filtered_df = filtered_df[filtered_df[abc_col].isin(categories_list)]
-    
-    if ris and ris_col in filtered_df.columns:
-        ris_list = ris.split(',')
-        filtered_df = filtered_df[filtered_df[ris_col].isin(ris_list)]
-    
-    if part_number and part_no_col in filtered_df.columns:
-        filtered_df = filtered_df[filtered_df[part_no_col].astype(str).str.contains(part_number, case=False, na=False)]
-    
-    return filtered_df
+# ============================================================================
+# FASTAPI ROUTES/ENDPOINTS
+# ============================================================================
 
 @app.get("/")
 async def dashboard(request: Request):
@@ -1446,18 +1738,13 @@ async def get_dead_stock_summary(
     last_to_last_month_last_year_start = last_to_last_month_start.replace(year=last_to_last_month_start.year - 1)
     last_to_last_month_last_year_end = last_to_last_month_end.replace(year=last_to_last_month_end.year - 1)
     
-    # OPTIMIZATION: Vectorized dead stock filtering
     def get_dead_stock_mask(df_temp, purchase_date_col, issue_date_col, stock_qty_col, date_range_start, date_range_end):
-        """Get mask for dead stock items in a date range"""
         try:
             stock_mask = pd.to_numeric(df_temp[stock_qty_col], errors='coerce').fillna(0) > 0
-            
             purchase_dates = pd.to_datetime(df_temp[purchase_date_col].astype(str).str[:10], errors='coerce')
             issue_dates = pd.to_datetime(df_temp[issue_date_col].astype(str).str[:10], errors='coerce')
-            
             date_range_mask = (purchase_dates >= date_range_start) & (purchase_dates <= date_range_end)
             no_issue_mask = issue_dates.isna() | (issue_dates < purchase_dates)
-            
             return stock_mask & date_range_mask & no_issue_mask
         except:
             return pd.Series([False] * len(df_temp), index=df_temp.index)
@@ -1815,6 +2102,67 @@ async def download_last_month_liquidation_csv(
     
     return FileResponse(path=output_path, filename=filename, media_type='text/csv')
 
+def open_browser(url):
+    """
+    Open the URL in Chrome. Falls back to default browser if Chrome is not available.
+    
+    CONFIGURATION:
+    - Set BROWSER_TYPE = 'chrome' to use Chrome (default)
+    - Set BROWSER_TYPE = 'edge' to use Edge
+    - Set BROWSER_TYPE = 'default' to use system default
+    - Set AUTO_OPEN_BROWSER = False to disable auto-opening
+    """
+    
+    AUTO_OPEN_BROWSER = True  # Set to False to disable auto-opening
+    BROWSER_TYPE = 'chrome'   # Options: 'chrome', 'edge', 'default'
+    
+    if not AUTO_OPEN_BROWSER:
+        return
+    
+    try:
+        if BROWSER_TYPE == 'chrome':
+            # Try to open with Chrome
+            if platform.system() == 'Windows':
+                chrome_paths = [
+                    r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+                    r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+                    r"C:\Users\{}\AppData\Local\Google\Chrome\Application\chrome.exe".format(os.getenv('USERNAME'))
+                ]
+                for path in chrome_paths:
+                    if os.path.exists(path):
+                        subprocess.Popen([path, url])
+                        print(f"✅ Opening Chrome: {url}")
+                        return
+            elif platform.system() == 'Darwin':  # macOS
+                subprocess.Popen(['open', '-a', 'Google Chrome', url])
+                print(f"✅ Opening Chrome: {url}")
+                return
+            elif platform.system() == 'Linux':
+                subprocess.Popen(['google-chrome', url])
+                print(f"✅ Opening Chrome: {url}")
+                return
+        
+        elif BROWSER_TYPE == 'edge':
+            # Try to open with Edge
+            if platform.system() == 'Windows':
+                edge_paths = [
+                    r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
+                    r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
+                ]
+                for path in edge_paths:
+                    if os.path.exists(path):
+                        subprocess.Popen([path, url])
+                        print(f"✅ Opening Edge: {url}")
+                        return
+        
+        # Fallback to system default browser
+        print(f"⚠️  Chrome/Edge not found. Opening with default browser...")
+        webbrowser.open(url)
+        
+    except Exception as e:
+        print(f"⚠️  Could not auto-open browser: {e}")
+        print(f"   Please manually open: {url}")
+
 if __name__ == "__main__":
     hostname = socket.gethostname()
     local_ip = socket.gethostbyname(hostname)
@@ -1825,5 +2173,9 @@ if __name__ == "__main__":
     print(f"   🌐 Local: http://localhost:{port}")
     print(f"   🌐 Network: http://{local_ip}:{port}")
     print("=" * 70)
+    
+    # Open browser in a separate thread
+    browser_thread = threading.Thread(target=open_browser, args=(f"http://localhost:{port}",), daemon=True)
+    browser_thread.start()
     
     uvicorn.run(app, host="0.0.0.0", port=port)
