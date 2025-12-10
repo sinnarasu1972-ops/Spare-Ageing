@@ -477,23 +477,8 @@ with open("static/style.css", "w") as f:
     .badge { font-size: 0.75rem; }
     #lastUpdateTime { font-size: 0.9rem; color: #666; }
     
-    /* UPLOAD AREA STYLING - CLEAN & SIMPLE */
-    .upload-card { background: white; border-radius: 8px; padding: 0; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); border: 1px solid #e0e0e0; overflow: hidden; }
-    .upload-card .card-body { padding: 0; }
-    .upload-header { background-color: #f8f9fa; padding: 12px 20px; border-bottom: 1px solid #e0e0e0; }
-    .upload-header h5 { color: #333; margin: 0; font-size: 1rem; font-weight: 600; }
-    .upload-header h5 i { color: #007bff; margin-right: 8px; }
-    .upload-area { border: 2px dashed #ccc; border-radius: 6px; padding: 30px 20px; text-align: center; cursor: pointer; transition: all 0.3s ease; margin: 15px; background-color: #ffffff; }
-    .upload-area:hover { background-color: #f8f9fa; border-color: #007bff; box-shadow: 0 3px 8px rgba(0, 123, 255, 0.1); }
-    .upload-area.dragover { background-color: #e7f3ff; border-color: #007bff; box-shadow: 0 5px 12px rgba(0, 123, 255, 0.2); }
-    .upload-area i { font-size: 2.5rem; color: #007bff; margin-bottom: 12px; display: block; }
-    .upload-area p { color: #333; margin: 8px 0; font-size: 1rem; font-weight: 500; }
-    .upload-area small { color: #666; font-size: 0.85rem; }
-    #uploadStatus { padding: 0 15px 15px 15px; }
-    #uploadStatus .alert { border-radius: 6px; border: none; font-weight: 500; padding: 10px 15px; font-size: 0.95rem; }
-    #uploadStatus .alert-success { background-color: #d4edda; color: #155724; }
-    #uploadStatus .alert-danger { background-color: #f8d7da; color: #721c24; }
-    #uploadStatus .alert-info { background-color: #d1ecf1; color: #0c5460; }
+    #uploadArea { transition: all 0.3s ease; }
+    #uploadArea:hover { background-color: #f0f0f0 !important; border-color: #007bff !important; cursor: pointer; }
     """)
 
 # HTML_TEMPLATE with file upload section
@@ -521,17 +506,15 @@ HTML_TEMPLATE = """
         <!-- FILE UPLOAD SECTION -->
         <div class="row mb-3">
             <div class="col-12">
-                <div class="card upload-card">
-                    <div class="upload-header">
-                        <h5><i class="bi bi-cloud-arrow-up"></i> Upload New Excel File</h5>
-                    </div>
-                    <div class="upload-area" id="uploadArea">
-                        <i class="bi bi-cloud-arrow-down"></i>
-                        <p>Drag & Drop Excel file here or click to browse</p>
+                <div class="card" style="border-radius: 8px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); margin-bottom: 20px; border: none; padding: 20px;">
+                    <h5 style="margin-bottom: 15px; color: #333; font-weight: 600;"><i class="bi bi-cloud-arrow-up"></i> Upload New Excel File</h5>
+                    <div id="uploadArea" style="border: 2px dashed #ccc; border-radius: 6px; padding: 30px 20px; text-align: center; cursor: pointer; background-color: #f9f9f9; transition: all 0.3s ease;">
+                        <i class="bi bi-cloud-arrow-down" style="font-size: 2.5rem; color: #007bff; margin-bottom: 12px; display: block;"></i>
+                        <p style="color: #333; margin: 8px 0; font-size: 1rem; font-weight: 500;">Drag & Drop Excel file here or click to browse</p>
                         <input type="file" id="fileInput" accept=".xlsx,.xls" style="display:none;">
-                        <small>Supports .xlsx and .xls files</small>
+                        <small style="color: #666; font-size: 0.85rem;">Supports .xlsx and .xls files</small>
                     </div>
-                    <div id="uploadStatus"></div>
+                    <div id="uploadStatus" style="margin-top: 15px;"></div>
                 </div>
             </div>
         </div>
@@ -912,16 +895,22 @@ HTML_TEMPLATE = """
             
             uploadArea.addEventListener('dragover', (e) => {
                 e.preventDefault();
-                uploadArea.classList.add('dragover');
+                uploadArea.style.backgroundColor = '#e7f3ff';
+                uploadArea.style.borderColor = '#007bff';
+                uploadArea.style.boxShadow = '0 5px 12px rgba(0, 123, 255, 0.2)';
             });
             
             uploadArea.addEventListener('dragleave', () => {
-                uploadArea.classList.remove('dragover');
+                uploadArea.style.backgroundColor = '#f9f9f9';
+                uploadArea.style.borderColor = '#ccc';
+                uploadArea.style.boxShadow = 'none';
             });
             
             uploadArea.addEventListener('drop', (e) => {
                 e.preventDefault();
-                uploadArea.classList.remove('dragover');
+                uploadArea.style.backgroundColor = '#f9f9f9';
+                uploadArea.style.borderColor = '#ccc';
+                uploadArea.style.boxShadow = 'none';
                 const files = e.dataTransfer.files;
                 if (files.length > 0) {
                     uploadFile(files[0]);
@@ -936,11 +925,11 @@ HTML_TEMPLATE = """
             
             function uploadFile(file) {
                 if (!file.name.match(/\.(xlsx|xls)$/)) {
-                    uploadStatus.innerHTML = '<div class="alert alert-danger" role="alert"><i class="bi bi-exclamation-circle"></i> Please upload .xlsx or .xls file only</div>';
+                    uploadStatus.innerHTML = '<div class="alert alert-danger" role="alert" style="margin: 0; border-radius: 6px; border: none; padding: 10px 15px;"><i class="bi bi-exclamation-circle"></i> Please upload .xlsx or .xls file only</div>';
                     return;
                 }
                 
-                uploadStatus.innerHTML = '<div class="alert alert-info" role="alert"><i class="bi bi-hourglass-split"></i> Uploading... Please wait</div>';
+                uploadStatus.innerHTML = '<div class="alert alert-info" role="alert" style="margin: 0; border-radius: 6px; border: none; padding: 10px 15px;"><i class="bi bi-hourglass-split"></i> Uploading... Please wait</div>';
                 
                 const formData = new FormData();
                 formData.append('file', file);
@@ -952,13 +941,13 @@ HTML_TEMPLATE = """
                     processData: false,
                     contentType: false,
                     success: function(res) {
-                        uploadStatus.innerHTML = '<div class="alert alert-success" role="alert"><i class="bi bi-check-circle"></i> ' + res.message + ' Refreshing dashboard...</div>';
+                        uploadStatus.innerHTML = '<div class="alert alert-success" role="alert" style="margin: 0; border-radius: 6px; border: none; padding: 10px 15px;"><i class="bi bi-check-circle"></i> ' + res.message + ' Refreshing dashboard...</div>';
                         setTimeout(() => {
                             location.reload();
                         }, 2000);
                     },
                     error: function(err) {
-                        uploadStatus.innerHTML = '<div class="alert alert-danger" role="alert"><i class="bi bi-x-circle"></i> Upload failed! Please try again.</div>';
+                        uploadStatus.innerHTML = '<div class="alert alert-danger" role="alert" style="margin: 0; border-radius: 6px; border: none; padding: 10px 15px;"><i class="bi bi-x-circle"></i> Upload failed! Please try again.</div>';
                     }
                 });
             }
