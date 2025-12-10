@@ -475,11 +475,25 @@ with open("static/style.css", "w") as f:
     .display-6 { font-size: 1.5rem; font-weight: 700; }
     .bootstrap-select .dropdown-menu { max-height: 300px; overflow-y: auto; }
     .badge { font-size: 0.75rem; }
-    .upload-area { border: 2px dashed #007bff; border-radius: 8px; padding: 20px; text-align: center; cursor: pointer; transition: all 0.3s; margin-bottom: 15px; }
-    .upload-area:hover { background-color: rgba(0,123,255,0.1); border-color: #0056b3; }
-    .upload-area.dragover { background-color: rgba(0,123,255,0.2); border-color: #0056b3; }
-    #uploadStatus { margin-top: 10px; }
     #lastUpdateTime { font-size: 0.9rem; color: #666; }
+    
+    /* UPLOAD AREA STYLING - SLEEK & PROFESSIONAL */
+    .upload-card { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 12px; padding: 0; margin-bottom: 20px; box-shadow: 0 10px 30px rgba(102, 126, 234, 0.2); border: none; overflow: hidden; }
+    .upload-card .card-body { padding: 0; }
+    .upload-header { background: rgba(255,255,255,0.1); padding: 15px 20px; border-bottom: 1px solid rgba(255,255,255,0.2); }
+    .upload-header h5 { color: white; margin: 0; font-size: 1.1rem; font-weight: 600; letter-spacing: 0.5px; }
+    .upload-area { border: 2px dashed rgba(255,255,255,0.4); border-radius: 8px; padding: 40px 20px; text-align: center; cursor: pointer; transition: all 0.4s ease; margin: 20px; background-color: rgba(255,255,255,0.05); }
+    .upload-area:hover { background-color: rgba(255,255,255,0.15); border-color: rgba(255,255,255,0.8); transform: translateY(-2px); box-shadow: 0 5px 15px rgba(0,0,0,0.1); }
+    .upload-area.dragover { background-color: rgba(255,255,255,0.25); border-color: white; box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4); }
+    .upload-area i { font-size: 3rem; color: rgba(255,255,255,0.9); margin-bottom: 15px; display: block; animation: float 3s ease-in-out infinite; }
+    @keyframes float { 0%, 100% { transform: translateY(0px); } 50% { transform: translateY(-10px); } }
+    .upload-area p { color: rgba(255,255,255,0.95); margin: 10px 0; font-size: 1.1rem; font-weight: 500; }
+    .upload-area small { color: rgba(255,255,255,0.8); font-size: 0.9rem; }
+    #uploadStatus { padding: 0 20px 20px 20px; }
+    #uploadStatus .alert { border-radius: 8px; border: none; font-weight: 500; }
+    #uploadStatus .alert-success { background-color: rgba(40, 167, 69, 0.1); color: #155724; }
+    #uploadStatus .alert-danger { background-color: rgba(220, 53, 69, 0.1); color: #721c24; }
+    #uploadStatus .alert-info { background-color: rgba(23, 162, 184, 0.1); color: #0c5460; }
     """)
 
 # HTML_TEMPLATE with file upload section
@@ -507,17 +521,17 @@ HTML_TEMPLATE = """
         <!-- FILE UPLOAD SECTION -->
         <div class="row mb-3">
             <div class="col-12">
-                <div class="card" style="border: 2px solid #007bff;">
-                    <div class="card-body">
-                        <h5 class="card-title mb-3">📤 Upload New Excel File (Auto-Updates Dashboard)</h5>
-                        <div class="upload-area" id="uploadArea">
-                            <p class="mb-2"><i class="bi bi-cloud-arrow-up" style="font-size: 2rem;"></i></p>
-                            <p class="mb-2"><strong>Drag & Drop Excel file here or click to browse</strong></p>
-                            <input type="file" id="fileInput" accept=".xlsx,.xls" style="display:none;">
-                            <small class="text-muted">Supports .xlsx and .xls files</small>
-                        </div>
-                        <div id="uploadStatus" class="mt-2"></div>
+                <div class="card upload-card">
+                    <div class="upload-header">
+                        <h5><i class="bi bi-cloud-arrow-up"></i> Upload New Excel File (Auto-Updates Dashboard)</h5>
                     </div>
+                    <div class="upload-area" id="uploadArea">
+                        <i class="bi bi-cloud-check-fill"></i>
+                        <p><strong>Drag & Drop Excel file here or click to browse</strong></p>
+                        <input type="file" id="fileInput" accept=".xlsx,.xls" style="display:none;">
+                        <small>Supports .xlsx and .xls files</small>
+                    </div>
+                    <div id="uploadStatus"></div>
                 </div>
             </div>
         </div>
@@ -922,11 +936,11 @@ HTML_TEMPLATE = """
             
             function uploadFile(file) {
                 if (!file.name.match(/\.(xlsx|xls)$/)) {
-                    uploadStatus.innerHTML = '<div class="alert alert-danger alert-sm" role="alert">❌ Please upload .xlsx or .xls file</div>';
+                    uploadStatus.innerHTML = '<div class="alert alert-danger" role="alert"><i class="bi bi-exclamation-circle"></i> Please upload .xlsx or .xls file only</div>';
                     return;
                 }
                 
-                uploadStatus.innerHTML = '<div class="alert alert-info alert-sm" role="alert">⏳ Uploading...</div>';
+                uploadStatus.innerHTML = '<div class="alert alert-info" role="alert"><i class="bi bi-hourglass-split"></i> Uploading... Please wait</div>';
                 
                 const formData = new FormData();
                 formData.append('file', file);
@@ -938,13 +952,13 @@ HTML_TEMPLATE = """
                     processData: false,
                     contentType: false,
                     success: function(res) {
-                        uploadStatus.innerHTML = '<div class="alert alert-success alert-sm" role="alert">✅ ' + res.message + '</div>';
+                        uploadStatus.innerHTML = '<div class="alert alert-success" role="alert"><i class="bi bi-check-circle"></i> ' + res.message + ' Refreshing dashboard...</div>';
                         setTimeout(() => {
                             location.reload();
                         }, 2000);
                     },
                     error: function(err) {
-                        uploadStatus.innerHTML = '<div class="alert alert-danger alert-sm" role="alert">❌ Upload failed</div>';
+                        uploadStatus.innerHTML = '<div class="alert alert-danger" role="alert"><i class="bi bi-x-circle"></i> Upload failed! Please try again.</div>';
                     }
                 });
             }
