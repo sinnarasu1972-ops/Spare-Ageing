@@ -504,15 +504,15 @@ HTML_TEMPLATE = """
         </div>
         
         <!-- RIGHT SIDE - UPLOAD BOX (STICKY) -->
-        <div style="position: fixed; right: 20px; top: 140px; width: 320px; z-index: 100;">
+        <div style="position: fixed; right: 20px; top: 110px; width: 320px; z-index: 100;">
             <div class="card" style="border-radius: 8px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12); border: 1px solid #e0e0e0;">
-                <div id="uploadArea" style="border: 2px dashed #999; border-radius: 6px; padding: 22px 15px; text-align: center; cursor: pointer; background-color: #fafafa; transition: all 0.3s ease; margin: 12px;">
-                    <i class="bi bi-cloud-arrow-down" style="font-size: 2rem; color: #007bff; margin-bottom: 8px; display: block;"></i>
-                    <p style="color: #333; margin: 6px 0; font-size: 0.9rem; font-weight: 500;">Drag & Drop Excel file here or click to browse</p>
+                <div id="uploadArea" style="border: 2px dashed #999; border-radius: 6px; padding: 20px 12px; text-align: center; cursor: pointer; background-color: #fafafa; transition: all 0.3s ease; margin: 10px;">
+                    <i class="bi bi-cloud-arrow-down" style="font-size: 1.8rem; color: #007bff; margin-bottom: 6px; display: block;"></i>
+                    <p style="color: #333; margin: 5px 0; font-size: 0.85rem; font-weight: 500;">Drag & Drop Excel file here or click to browse</p>
                     <input type="file" id="fileInput" accept=".xlsx,.xls" style="display:none;">
-                    <small style="color: #666; font-size: 0.75rem;">Supports .xlsx and .xls files</small>
+                    <small style="color: #666; font-size: 0.7rem;">Supports .xlsx and .xls files</small>
                 </div>
-                <div id="uploadStatus" style="padding: 0 12px 12px 12px;"></div>
+                <div id="uploadStatus" style="padding: 0 10px 10px 10px; font-size: 0.8rem;"></div>
             </div>
         </div>
         
