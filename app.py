@@ -921,7 +921,8 @@ HTML_TEMPLATE = """
             });
             
             function uploadFile(file) {
-                if (!file.name.match(/\.(xlsx|xls)$/)) {
+                const ext = file.name.split('.').pop().toLowerCase();
+                if (ext !== 'xlsx' && ext !== 'xls') {
                     uploadStatus.innerHTML = '<div class="alert alert-danger" role="alert" style="margin: 0; border-radius: 6px; border: none; padding: 10px 15px;"><i class="bi bi-exclamation-circle"></i> Please upload .xlsx or .xls file only</div>';
                     return;
                 }
