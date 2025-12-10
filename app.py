@@ -477,23 +477,23 @@ with open("static/style.css", "w") as f:
     .badge { font-size: 0.75rem; }
     #lastUpdateTime { font-size: 0.9rem; color: #666; }
     
-    /* UPLOAD AREA STYLING - SLEEK & PROFESSIONAL */
-    .upload-card { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 12px; padding: 0; margin-bottom: 20px; box-shadow: 0 10px 30px rgba(102, 126, 234, 0.2); border: none; overflow: hidden; }
+    /* UPLOAD AREA STYLING - CLEAN & SIMPLE */
+    .upload-card { background: white; border-radius: 8px; padding: 0; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); border: 1px solid #e0e0e0; overflow: hidden; }
     .upload-card .card-body { padding: 0; }
-    .upload-header { background: rgba(255,255,255,0.1); padding: 15px 20px; border-bottom: 1px solid rgba(255,255,255,0.2); }
-    .upload-header h5 { color: white; margin: 0; font-size: 1.1rem; font-weight: 600; letter-spacing: 0.5px; }
-    .upload-area { border: 2px dashed rgba(255,255,255,0.4); border-radius: 8px; padding: 40px 20px; text-align: center; cursor: pointer; transition: all 0.4s ease; margin: 20px; background-color: rgba(255,255,255,0.05); }
-    .upload-area:hover { background-color: rgba(255,255,255,0.15); border-color: rgba(255,255,255,0.8); transform: translateY(-2px); box-shadow: 0 5px 15px rgba(0,0,0,0.1); }
-    .upload-area.dragover { background-color: rgba(255,255,255,0.25); border-color: white; box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4); }
-    .upload-area i { font-size: 3rem; color: rgba(255,255,255,0.9); margin-bottom: 15px; display: block; animation: float 3s ease-in-out infinite; }
-    @keyframes float { 0%, 100% { transform: translateY(0px); } 50% { transform: translateY(-10px); } }
-    .upload-area p { color: rgba(255,255,255,0.95); margin: 10px 0; font-size: 1.1rem; font-weight: 500; }
-    .upload-area small { color: rgba(255,255,255,0.8); font-size: 0.9rem; }
-    #uploadStatus { padding: 0 20px 20px 20px; }
-    #uploadStatus .alert { border-radius: 8px; border: none; font-weight: 500; }
-    #uploadStatus .alert-success { background-color: rgba(40, 167, 69, 0.1); color: #155724; }
-    #uploadStatus .alert-danger { background-color: rgba(220, 53, 69, 0.1); color: #721c24; }
-    #uploadStatus .alert-info { background-color: rgba(23, 162, 184, 0.1); color: #0c5460; }
+    .upload-header { background-color: #f8f9fa; padding: 12px 20px; border-bottom: 1px solid #e0e0e0; }
+    .upload-header h5 { color: #333; margin: 0; font-size: 1rem; font-weight: 600; }
+    .upload-header h5 i { color: #007bff; margin-right: 8px; }
+    .upload-area { border: 2px dashed #ccc; border-radius: 6px; padding: 30px 20px; text-align: center; cursor: pointer; transition: all 0.3s ease; margin: 15px; background-color: #ffffff; }
+    .upload-area:hover { background-color: #f8f9fa; border-color: #007bff; box-shadow: 0 3px 8px rgba(0, 123, 255, 0.1); }
+    .upload-area.dragover { background-color: #e7f3ff; border-color: #007bff; box-shadow: 0 5px 12px rgba(0, 123, 255, 0.2); }
+    .upload-area i { font-size: 2.5rem; color: #007bff; margin-bottom: 12px; display: block; }
+    .upload-area p { color: #333; margin: 8px 0; font-size: 1rem; font-weight: 500; }
+    .upload-area small { color: #666; font-size: 0.85rem; }
+    #uploadStatus { padding: 0 15px 15px 15px; }
+    #uploadStatus .alert { border-radius: 6px; border: none; font-weight: 500; padding: 10px 15px; font-size: 0.95rem; }
+    #uploadStatus .alert-success { background-color: #d4edda; color: #155724; }
+    #uploadStatus .alert-danger { background-color: #f8d7da; color: #721c24; }
+    #uploadStatus .alert-info { background-color: #d1ecf1; color: #0c5460; }
     """)
 
 # HTML_TEMPLATE with file upload section
@@ -523,11 +523,11 @@ HTML_TEMPLATE = """
             <div class="col-12">
                 <div class="card upload-card">
                     <div class="upload-header">
-                        <h5><i class="bi bi-cloud-arrow-up"></i> Upload New Excel File (Auto-Updates Dashboard)</h5>
+                        <h5><i class="bi bi-cloud-arrow-up"></i> Upload New Excel File</h5>
                     </div>
                     <div class="upload-area" id="uploadArea">
-                        <i class="bi bi-cloud-check-fill"></i>
-                        <p><strong>Drag & Drop Excel file here or click to browse</strong></p>
+                        <i class="bi bi-cloud-arrow-down"></i>
+                        <p>Drag & Drop Excel file here or click to browse</p>
                         <input type="file" id="fileInput" accept=".xlsx,.xls" style="display:none;">
                         <small>Supports .xlsx and .xls files</small>
                     </div>
