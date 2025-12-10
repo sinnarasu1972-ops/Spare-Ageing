@@ -1,21 +1,36 @@
 import schedule
 import threading
 import time
+import os
 from datetime import datetime, timedelta
+from pathlib import Path
 import pandas as pd
 import numpy as np
 import uvicorn
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, UploadFile, File
 from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
-import os
 import sys
 from typing import Optional
 from jinja2 import Template
 
 print("\n" + "="*80)
-print("🚀 ULTRA-FAST DASHBOARD - CSV MODE WITH CACHING")
+print("🚀 ULTRA-FAST DASHBOARD WITH AUTO-UPDATE")
 print("="*80)
+
+# ============================================================================
+# GLOBAL VARIABLES FOR AUTO-UPDATE
+# ============================================================================
+last_reload_time = None
+excel_file_path = "./Spares Ageing Report.xlsx"
+last_file_modified = None
+
+def get_file_modified_time(filepath):
+    """Get file modification time"""
+    try:
+        return os.path.getmtime(filepath)
+    except:
+        return None
 
 # ============================================================================
 # STEP 1: CONVERT XLSX TO CSV (Only once at startup + reload time)
@@ -23,7 +38,7 @@ print("="*80)
 
 def process_excel_to_csv_fast():
     """Fast Excel to CSV conversion with minimal processing"""
-    input_file = "./Spares Ageing Report.xlsx"
+    input_file = excel_file_path
     output_csv = "./Spares_Ageing_Processed.csv"
     
     print("\n📊 Converting XLSX → CSV (one-time operation)...")
@@ -182,6 +197,10 @@ print(f"   ✓ Part Categories: {len(part_categories)}")
 print(f"   ✓ Dead Stock: {df['Is Dead Stock'].sum():,}")
 print(f"   ✓ Total GNDP: ₹{total_gndp:,.2f} Lac")
 
+# Set last reload time and file modified time
+last_reload_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+last_file_modified = get_file_modified_time(excel_file_path)
+
 # ============================================================================
 # STEP 3: ULTRA-FAST FILTERING (Vectorized operations)
 # ============================================================================
@@ -260,6 +279,10 @@ with open("static/style.css", "w") as f:
     h1 { color: #333; font-weight: 700; }
     .btn-sm { padding: 4px 8px; font-size: 11px; }
     .form-select { font-size: 12px; padding: 4px 6px; }
+    .upload-area { border: 2px dashed #007bff; border-radius: 8px; padding: 20px; text-align: center; cursor: pointer; transition: all 0.3s; }
+    .upload-area:hover { background-color: rgba(0,123,255,0.1); border-color: #0056b3; }
+    .upload-area.dragover { background-color: rgba(0,123,255,0.2); border-color: #0056b3; }
+    #lastUpdateTime { font-size: 11px; color: #666; }
     """)
 
 HTML_TEMPLATE = """<!DOCTYPE html>
@@ -275,7 +298,31 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 </head>
 <body>
     <div class="container-fluid p-2">
-        <h1 class="text-center mb-3">Spare Parts Ageing Dashboard</h1>
+        <div class="row mb-2">
+            <div class="col-12">
+                <h1 class="text-center mb-1">Spare Parts Ageing Dashboard</h1>
+                <div class="text-center" id="lastUpdateTime" style="color: #666; font-size: 11px;">
+                    Last Updated: {{ last_reload_time }}
+                </div>
+            </div>
+        </div>
+
+        <!-- FILE UPLOAD SECTION -->
+        <div class="row mb-2">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-body p-3">
+                        <h6 class="mb-2">📤 Upload New Excel File (Auto-Updates Dashboard)</h6>
+                        <div class="upload-area" id="uploadArea">
+                            <p class="mb-2"><i class="bi bi-cloud-arrow-up"></i> Drag & Drop Excel file here or click to browse</p>
+                            <input type="file" id="fileInput" accept=".xlsx,.xls" style="display:none;">
+                            <small class="text-muted">Supports .xlsx and .xls files</small>
+                        </div>
+                        <div id="uploadStatus" class="mt-2"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
         
         <div class="row mb-2">
             <div class="col-lg-2 col-md-4">
@@ -341,6 +388,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                 <button class="btn btn-primary btn-sm" id="applyFilters">Apply Filters</button>
                 <button class="btn btn-warning btn-sm" id="clearFilters">Clear All</button>
                 <button class="btn btn-success btn-sm" id="downloadCsv">Download CSV</button>
+                <button class="btn btn-info btn-sm" id="reloadData">🔄 Reload Data (Manual)</button>
             </div>
         </div>
         
@@ -392,6 +440,67 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             
             $('.selectpicker').selectpicker();
             
+            // ===== FILE UPLOAD =====
+            const uploadArea = document.getElementById('uploadArea');
+            const fileInput = document.getElementById('fileInput');
+            const uploadStatus = document.getElementById('uploadStatus');
+            
+            uploadArea.addEventListener('click', () => fileInput.click());
+            
+            uploadArea.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                uploadArea.classList.add('dragover');
+            });
+            
+            uploadArea.addEventListener('dragleave', () => {
+                uploadArea.classList.remove('dragover');
+            });
+            
+            uploadArea.addEventListener('drop', (e) => {
+                e.preventDefault();
+                uploadArea.classList.remove('dragover');
+                const files = e.dataTransfer.files;
+                if (files.length > 0) {
+                    uploadFile(files[0]);
+                }
+            });
+            
+            fileInput.addEventListener('change', (e) => {
+                if (e.target.files.length > 0) {
+                    uploadFile(e.target.files[0]);
+                }
+            });
+            
+            function uploadFile(file) {
+                if (!file.name.match(/\\.(xlsx|xls)$/)) {
+                    uploadStatus.innerHTML = '<div class="alert alert-danger alert-sm" role="alert">❌ Please upload .xlsx or .xls file</div>';
+                    return;
+                }
+                
+                uploadStatus.innerHTML = '<div class="alert alert-info alert-sm" role="alert">⏳ Uploading...</div>';
+                
+                const formData = new FormData();
+                formData.append('file', file);
+                
+                $.ajax({
+                    url: '/upload-excel',
+                    type: 'POST',
+                    data: formData,
+                    processData: false,
+                    contentType: false,
+                    success: function(res) {
+                        uploadStatus.innerHTML = '<div class="alert alert-success alert-sm" role="alert">✅ ' + res.message + '</div>';
+                        setTimeout(() => {
+                            location.reload();
+                        }, 2000);
+                    },
+                    error: function(err) {
+                        uploadStatus.innerHTML = '<div class="alert alert-danger alert-sm" role="alert">❌ Upload failed</div>';
+                    }
+                });
+            }
+            
+            // ===== FILTERS =====
             function getFilters() {
                 return {
                     movementCategory: $('#movementCategory').val()?.join(',') || '',
@@ -496,6 +605,10 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                 window.location.href = `/download-csv?${qs}`;
             });
             
+            $('#reloadData').click(() => {
+                location.reload();
+            });
+            
             $(document).on('click', '.page-link', function(e) {
                 e.preventDefault();
                 const page = parseInt($(this).data('page'));
@@ -521,8 +634,48 @@ async def get_dashboard():
         part_categories=part_categories,
         locations=locations,
         abc_categories=abc_categories,
-        ris_values=ris_values
+        ris_values=ris_values,
+        last_reload_time=last_reload_time
     )
+
+# FILE UPLOAD ENDPOINT
+@app.post("/upload-excel")
+async def upload_excel(file: UploadFile = File(...)):
+    """Handle Excel file upload"""
+    global df, total_gndp, locations, abc_categories, ris_values, part_categories, movement_categories, last_reload_time, last_file_modified
+    
+    try:
+        # Save uploaded file
+        contents = await file.read()
+        with open(excel_file_path, 'wb') as f:
+            f.write(contents)
+        
+        print(f"\n📤 New Excel file uploaded: {file.filename}")
+        
+        # Reload data
+        csv_file = process_excel_to_csv_fast()
+        if csv_file is None:
+            return {"success": False, "message": "Processing failed"}
+        
+        df = pd.read_csv(csv_file)
+        
+        total_gndp = df[gndp_column].sum() if gndp_column in df.columns else 0
+        locations = sorted([x for x in df[location_col].dropna().unique() if pd.notna(x)]) if location_col in df.columns else []
+        abc_categories = sorted([x for x in df[abc_col].dropna().unique() if pd.notna(x)]) if abc_col and abc_col in df.columns else []
+        ris_values = sorted([x for x in df[ris_col].dropna().unique() if pd.notna(x)]) if ris_col and ris_col in df.columns else []
+        part_categories = sorted([x for x in df[part_category_col].dropna().unique() if pd.notna(x)]) if part_category_col in df.columns else []
+        
+        last_reload_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        last_file_modified = get_file_modified_time(excel_file_path)
+        
+        print(f"✅ File uploaded and processed successfully!")
+        print(f"   Records: {len(df):,}")
+        
+        return {"success": True, "message": f"✅ Uploaded! {len(df):,} records loaded"}
+        
+    except Exception as e:
+        print(f"❌ Upload error: {e}")
+        return {"success": False, "message": f"Error: {str(e)}"}
 
 # Data endpoint (FAST - vectorized)
 @app.get("/data")
@@ -566,21 +719,18 @@ async def download_csv(movement_category: Optional[str] = None, part_category: O
     filtered_df.to_csv(output_path, index=False)
     return FileResponse(path=output_path, filename=filename, media_type='text/csv')
 
-# ============================================================================
-# AUTOMATIC DATA RELOAD SCHEDULER - 4 PM IST
-# ============================================================================
-
-reload_lock = threading.Lock()
-
-def auto_reload_data():
-    """Reload data from XLSX → CSV → Memory"""
-    global df, total_gndp, locations, abc_categories, ris_values, part_categories, movement_categories
+# AUTO-RELOAD CHECK (Every 5 minutes)
+def check_file_changes():
+    """Check if Excel file has been modified and reload if needed"""
+    global df, total_gndp, locations, abc_categories, ris_values, part_categories, movement_categories, last_reload_time, last_file_modified
     
-    with reload_lock:
-        try:
-            current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    try:
+        current_modified = get_file_modified_time(excel_file_path)
+        
+        # If file modification time changed, reload
+        if current_modified and last_file_modified and current_modified > last_file_modified:
             print(f"\n{'='*80}")
-            print(f"⏰ AUTO RELOAD at {current_time} (4:00 PM IST)")
+            print(f"⏰ AUTO-DETECT: Excel file modified, reloading...")
             print(f"{'='*80}")
             
             csv_file = process_excel_to_csv_fast()
@@ -596,32 +746,34 @@ def auto_reload_data():
             ris_values = sorted([x for x in df[ris_col].dropna().unique() if pd.notna(x)]) if ris_col and ris_col in df.columns else []
             part_categories = sorted([x for x in df[part_category_col].dropna().unique() if pd.notna(x)]) if part_category_col in df.columns else []
             
-            print(f"✅ Reload complete!")
-            print(f"   Records: {len(df):,}")
-            print(f"   Dead Stock: {df['Is Dead Stock'].sum():,}")
-            print(f"{'='*80}\n")
+            last_reload_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            last_file_modified = current_modified
             
-        except Exception as e:
-            print(f"❌ Reload error: {e}\n")
+            print(f"✅ Auto-reload complete!")
+            print(f"   Records: {len(df):,}")
+            print(f"{'='*80}\n")
+    except Exception as e:
+        print(f"⚠️  Auto-detect error: {e}")
 
+# Background scheduler thread
 def scheduler_loop():
-    print("\n🎯 Scheduler running - Daily reload at 4:00 PM IST (10:30 UTC)\n")
+    print("\n🎯 Auto-detect scheduler running (checks every 5 minutes)\n")
     while True:
-        schedule.run_pending()
-        time.sleep(60)
+        check_file_changes()
+        time.sleep(300)  # Check every 5 minutes
 
-schedule.every().day.at("10:30").do(auto_reload_data)
 scheduler_thread = threading.Thread(target=scheduler_loop, daemon=True)
 scheduler_thread.start()
 
 print("\n" + "="*80)
-print("✅ DASHBOARD READY - ULTRA-FAST MODE")
+print("✅ DASHBOARD READY - WITH AUTO-UPDATE!")
 print("="*80)
-print(f"📍 Access at: http://localhost:8004")
-print(f"⏰ Auto-reload: 4:00 PM IST Daily")
-print(f"📊 Total Records: {len(df):,}")
-print(f"💾 Mode: CSV In-Memory (Super Fast)")
+print(f"📍 Features:")
+print(f"   ✓ Upload Excel files directly (drag & drop)")
+print(f"   ✓ Auto-detects file changes every 5 minutes")
+print(f"   ✓ Manual reload button available")
+print(f"   ✓ Super fast CSV-based processing")
 print("="*80 + "\n")
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8004)
+    uvicorn.run(app, host="0.0.0.0", port=10000)
