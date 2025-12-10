@@ -482,7 +482,7 @@ with open("static/style.css", "w") as f:
     """)
 
 # HTML_TEMPLATE with file upload section
-HTML_TEMPLATE = """
+HTML_TEMPLATE = r"""
 <!DOCTYPE html>
 <html lang="en">
 <head>
