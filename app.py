@@ -495,7 +495,7 @@ HTML_TEMPLATE = """
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
 </head>
 <body>
-    <div class="container-fluid">
+    <div class="container-fluid" style="padding-right: 400px;">
         <div class="row">
             <div class="col-12">
                 <h1 class="text-center my-4">Unnati Motors Mahindra Spare Parts Ageing Dashboard</h1>
@@ -503,19 +503,16 @@ HTML_TEMPLATE = """
             </div>
         </div>
 
-        <!-- FILE UPLOAD SECTION -->
-        <div class="row mb-3">
-            <div class="col-12">
-                <div class="card" style="border-radius: 8px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); margin-bottom: 20px; border: none; padding: 20px;">
-                    <h5 style="margin-bottom: 15px; color: #333; font-weight: 600;"><i class="bi bi-cloud-arrow-up"></i> Upload New Excel File</h5>
-                    <div id="uploadArea" style="border: 2px dashed #ccc; border-radius: 6px; padding: 30px 20px; text-align: center; cursor: pointer; background-color: #f9f9f9; transition: all 0.3s ease;">
-                        <i class="bi bi-cloud-arrow-down" style="font-size: 2.5rem; color: #007bff; margin-bottom: 12px; display: block;"></i>
-                        <p style="color: #333; margin: 8px 0; font-size: 1rem; font-weight: 500;">Drag & Drop Excel file here or click to browse</p>
-                        <input type="file" id="fileInput" accept=".xlsx,.xls" style="display:none;">
-                        <small style="color: #666; font-size: 0.85rem;">Supports .xlsx and .xls files</small>
-                    </div>
-                    <div id="uploadStatus" style="margin-top: 15px;"></div>
+        <!-- UPLOAD SECTION - RIGHT SIDEBAR -->
+        <div style="position: fixed; right: 30px; top: 280px; width: 360px; z-index: 1000;">
+            <div class="card" style="border-radius: 8px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15); border: none;">
+                <div id="uploadArea" style="border: 2px dashed #ccc; border-radius: 6px; padding: 25px 15px; text-align: center; cursor: pointer; background-color: #f9f9f9; transition: all 0.3s ease; margin: 15px;">
+                    <i class="bi bi-cloud-arrow-down" style="font-size: 2.2rem; color: #007bff; margin-bottom: 10px; display: block;"></i>
+                    <p style="color: #333; margin: 8px 0; font-size: 0.95rem; font-weight: 500;">Drag & Drop Excel file here or click to browse</p>
+                    <input type="file" id="fileInput" accept=".xlsx,.xls" style="display:none;">
+                    <small style="color: #666; font-size: 0.8rem;">Supports .xlsx and .xls files</small>
                 </div>
+                <div id="uploadStatus" style="padding: 0 15px 15px 15px;"></div>
             </div>
         </div>
         
