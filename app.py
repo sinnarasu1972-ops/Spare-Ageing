@@ -1064,7 +1064,12 @@ async def download_dead_stock_csv(
     result_df = pd.DataFrame()
     category_name = "All"
     
-    if dead_stock_category == "current_month_complete":
+    if dead_stock_category == "current_month_as_on_date":
+        mask = get_dead_stock_mask(filtered_df, pd.Timestamp(current_month_last_year_start), pd.Timestamp(current_month_last_year_end))
+        result_df = filtered_df[mask]
+        category_name = "Current_Month_AsOnDate"
+    
+    elif dead_stock_category == "current_month_complete":
         if current_month_start.month == 12:
             current_month_last_year_complete_end = current_month_last_year_start.replace(year=current_month_last_year_start.year + 1, month=1, day=1) - timedelta(days=1)
         else:
@@ -1084,7 +1089,7 @@ async def download_dead_stock_csv(
         result_df = filtered_df[mask]
         category_name = "Last_To_Last_Month"
     
-    else:
+    else:  # all
         result_df = filtered_df[filtered_df['Is Dead Stock'] == True]
         category_name = "All"
     
