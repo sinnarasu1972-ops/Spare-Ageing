@@ -1631,7 +1631,7 @@ HTML_TEMPLATE = """
             let lastThree = numStr.substring(numStr.length - 3);
             let otherNumbers = numStr.substring(0, numStr.length - 3);
             if (otherNumbers !== '') lastThree = ',' + lastThree;
-            let result = otherNumbers.replace(/\B(?=(\d{{2}})+(?!\d))/g, ',') + lastThree;
+            let result = otherNumbers.replace(/\\B(?=(\\d{{2}})+(?!\\d))/g, ',') + lastThree;
             return actualValue < 0 ? '-' + result : result;
         }}
         
