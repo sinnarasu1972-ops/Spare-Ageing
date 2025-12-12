@@ -649,12 +649,6 @@ async def get_summary(
                 'aging_366_730_value': loc_df[loc_df['Movement Category P (2)'] == '366 to 730 days'][gndp_column].sum() if gndp_column in loc_df.columns else 0,
                 'aging_730_plus_count': len(loc_df[loc_df['Movement Category P (2)'] == '730 and above']),
                 'aging_730_plus_value': loc_df[loc_df['Movement Category P (2)'] == '730 and above'][gndp_column].sum() if gndp_column in loc_df.columns else 0,
-                'last_to_last_month_count': len(loc_df[loc_df['Purchase Month Category'] == 'Last to Last Month']),
-                'last_to_last_month_value': loc_df[loc_df['Purchase Month Category'] == 'Last to Last Month'][gndp_column].sum() if gndp_column in loc_df.columns else 0,
-                'last_month_count': len(loc_df[loc_df['Purchase Month Category'] == 'Last Month']),
-                'last_month_value': loc_df[loc_df['Purchase Month Category'] == 'Last Month'][gndp_column].sum() if gndp_column in loc_df.columns else 0,
-                'current_month_count': len(loc_df[loc_df['Purchase Month Category'] == 'Current Month']),
-                'current_month_value': loc_df[loc_df['Purchase Month Category'] == 'Current Month'][gndp_column].sum() if gndp_column in loc_df.columns else 0,
             }
             summary_data.append(summary_row)
     
@@ -669,12 +663,6 @@ async def get_summary(
         'aging_366_730_value': sum(row['aging_366_730_value'] for row in summary_data),
         'aging_730_plus_count': sum(row['aging_730_plus_count'] for row in summary_data),
         'aging_730_plus_value': sum(row['aging_730_plus_value'] for row in summary_data),
-        'last_to_last_month_count': sum(row['last_to_last_month_count'] for row in summary_data),
-        'last_to_last_month_value': sum(row['last_to_last_month_value'] for row in summary_data),
-        'last_month_count': sum(row['last_month_count'] for row in summary_data),
-        'last_month_value': sum(row['last_month_value'] for row in summary_data),
-        'current_month_count': sum(row['current_month_count'] for row in summary_data),
-        'current_month_value': sum(row['current_month_value'] for row in summary_data),
     }
     
     return {"summary": summary_data, "total": total_row}
@@ -810,31 +798,20 @@ async def get_dead_stock_summary(
         except:
             return pd.Series([False] * len(df_temp), index=df_temp.index)
     
-    # Current Month Complete
-    if current_month_start.month == 12:
-        current_month_last_year_complete_end = current_month_last_year_start.replace(year=current_month_last_year_start.year + 1, month=1, day=1) - timedelta(days=1)
-    else:
-        current_month_last_year_complete_end = current_month_last_year_start.replace(month=current_month_last_year_start.month + 1, day=1) - timedelta(days=1)
-    
-    current_month_complete_mask = get_dead_stock_mask(filtered_df, pd.Timestamp(current_month_last_year_start), pd.Timestamp(current_month_last_year_complete_end))
+    current_month_complete_mask = get_dead_stock_mask(filtered_df, pd.Timestamp(current_month_last_year_start), pd.Timestamp(current_month_last_year_start.replace(month=current_month_last_year_start.month + 1 if current_month_last_year_start.month < 12 else 1, year=current_month_last_year_start.year + (1 if current_month_last_year_start.month == 12 else 0)) - timedelta(days=1)))
     current_month_complete_df = filtered_df[current_month_complete_mask]
     
-    # Current Month As On Date
     current_month_as_on_date_mask = get_dead_stock_mask(filtered_df, pd.Timestamp(current_month_last_year_start), pd.Timestamp(current_month_last_year_end))
     current_month_as_on_date_df = filtered_df[current_month_as_on_date_mask]
     
-    # Last Month
     last_month_mask = get_dead_stock_mask(filtered_df, pd.Timestamp(last_month_last_year_start), pd.Timestamp(last_month_last_year_end))
     last_month_df = filtered_df[last_month_mask]
     
-    # Last to Last Month
     last_to_last_month_mask = get_dead_stock_mask(filtered_df, pd.Timestamp(last_to_last_month_last_year_start), pd.Timestamp(last_to_last_month_last_year_end))
     last_to_last_month_df = filtered_df[last_to_last_month_mask]
     
-    # Total Dead Stock
     dead_stock_df = filtered_df[filtered_df['Is Dead Stock'] == True]
     
-    # Last Month Liquidation
     try:
         stock_mask = pd.to_numeric(filtered_df[stock_qty_col], errors='coerce').fillna(0) > 0
         purchase_dates = pd.to_datetime(filtered_df[last_purchase_col].astype(str).str[:10], errors='coerce')
@@ -920,21 +897,15 @@ async def download_summary_csv(
             summary_data.append({
                 'Location': loc,
                 '0-90 Days Count': len(loc_df[loc_df['Movement Category P (2)'] == '0 to 90 days']),
-                '0-90 Days Value (Rs.)': format_indian_number(loc_df[loc_df['Movement Category P (2)'] == '0 to 90 days'][gndp_column].sum() if gndp_column in loc_df.columns else 0),
+                '0-90 Days Value (Rs.)': loc_df[loc_df['Movement Category P (2)'] == '0 to 90 days'][gndp_column].sum() if gndp_column in loc_df.columns else 0,
                 '91-180 Days Count': len(loc_df[loc_df['Movement Category P (2)'] == '91 to 180 days']),
-                '91-180 Days Value (Rs.)': format_indian_number(loc_df[loc_df['Movement Category P (2)'] == '91 to 180 days'][gndp_column].sum() if gndp_column in loc_df.columns else 0),
+                '91-180 Days Value (Rs.)': loc_df[loc_df['Movement Category P (2)'] == '91 to 180 days'][gndp_column].sum() if gndp_column in loc_df.columns else 0,
                 '181-365 Days Count': len(loc_df[loc_df['Movement Category P (2)'] == '181 to 365 days']),
-                '181-365 Days Value (Rs.)': format_indian_number(loc_df[loc_df['Movement Category P (2)'] == '181 to 365 days'][gndp_column].sum() if gndp_column in loc_df.columns else 0),
+                '181-365 Days Value (Rs.)': loc_df[loc_df['Movement Category P (2)'] == '181 to 365 days'][gndp_column].sum() if gndp_column in loc_df.columns else 0,
                 '366-730 Days Count': len(loc_df[loc_df['Movement Category P (2)'] == '366 to 730 days']),
-                '366-730 Days Value (Rs.)': format_indian_number(loc_df[loc_df['Movement Category P (2)'] == '366 to 730 days'][gndp_column].sum() if gndp_column in loc_df.columns else 0),
+                '366-730 Days Value (Rs.)': loc_df[loc_df['Movement Category P (2)'] == '366 to 730 days'][gndp_column].sum() if gndp_column in loc_df.columns else 0,
                 '730+ Days Count': len(loc_df[loc_df['Movement Category P (2)'] == '730 and above']),
-                '730+ Days Value (Rs.)': format_indian_number(loc_df[loc_df['Movement Category P (2)'] == '730 and above'][gndp_column].sum() if gndp_column in loc_df.columns else 0),
-                'Last to Last Month Count': len(loc_df[loc_df['Purchase Month Category'] == 'Last to Last Month']),
-                'Last to Last Month Value (Rs.)': format_indian_number(loc_df[loc_df['Purchase Month Category'] == 'Last to Last Month'][gndp_column].sum() if gndp_column in loc_df.columns else 0),
-                'Last Month Count': len(loc_df[loc_df['Purchase Month Category'] == 'Last Month']),
-                'Last Month Value (Rs.)': format_indian_number(loc_df[loc_df['Purchase Month Category'] == 'Last Month'][gndp_column].sum() if gndp_column in loc_df.columns else 0),
-                'Current Month Count': len(loc_df[loc_df['Purchase Month Category'] == 'Current Month']),
-                'Current Month Value (Rs.)': format_indian_number(loc_df[loc_df['Purchase Month Category'] == 'Current Month'][gndp_column].sum() if gndp_column in loc_df.columns else 0),
+                '730+ Days Value (Rs.)': loc_df[loc_df['Movement Category P (2)'] == '730 and above'][gndp_column].sum() if gndp_column in loc_df.columns else 0,
             })
     
     if summary_data:
@@ -945,9 +916,6 @@ async def download_summary_csv(
             '181-365 Days Count': sum(row['181-365 Days Count'] for row in summary_data),
             '366-730 Days Count': sum(row['366-730 Days Count'] for row in summary_data),
             '730+ Days Count': sum(row['730+ Days Count'] for row in summary_data),
-            'Last to Last Month Count': sum(row['Last to Last Month Count'] for row in summary_data),
-            'Last Month Count': sum(row['Last Month Count'] for row in summary_data),
-            'Current Month Count': sum(row['Current Month Count'] for row in summary_data),
         }
         summary_data.append(total_row)
     
@@ -1070,12 +1038,8 @@ async def download_dead_stock_csv(
         category_name = "Current_Month_AsOnDate"
     
     elif dead_stock_category == "current_month_complete":
-        if current_month_start.month == 12:
-            current_month_last_year_complete_end = current_month_last_year_start.replace(year=current_month_last_year_start.year + 1, month=1, day=1) - timedelta(days=1)
-        else:
-            current_month_last_year_complete_end = current_month_last_year_start.replace(month=current_month_last_year_start.month + 1, day=1) - timedelta(days=1)
-        
-        mask = get_dead_stock_mask(filtered_df, pd.Timestamp(current_month_last_year_start), pd.Timestamp(current_month_last_year_complete_end))
+        complete_end = current_month_last_year_start.replace(month=current_month_last_year_start.month + 1 if current_month_last_year_start.month < 12 else 1, year=current_month_last_year_start.year + (1 if current_month_last_year_start.month == 12 else 0)) - timedelta(days=1)
+        mask = get_dead_stock_mask(filtered_df, pd.Timestamp(current_month_last_year_start), pd.Timestamp(complete_end))
         result_df = filtered_df[mask]
         category_name = "Current_Month_Complete"
     
@@ -1089,7 +1053,7 @@ async def download_dead_stock_csv(
         result_df = filtered_df[mask]
         category_name = "Last_To_Last_Month"
     
-    else:  # all
+    else:
         result_df = filtered_df[filtered_df['Is Dead Stock'] == True]
         category_name = "All"
     
@@ -1474,7 +1438,6 @@ HTML_TEMPLATE = """
                                 <th colspan="2" class="text-center">181-365 Days</th>
                                 <th colspan="2" class="text-center">366-730 Days</th>
                                 <th colspan="2" class="text-center">730+ Days</th>
-                                <th colspan="2" class="text-center">Total</th>
                             </tr>
                         </thead>
                         <tbody></tbody>
@@ -1722,8 +1685,6 @@ HTML_TEMPLATE = """
                                 <td class="text-end">${{formatIndianNumber(row.aging_366_730_value)}}</td>
                                 <td class="text-end">${{row.aging_730_plus_count}}</td>
                                 <td class="text-end">${{formatIndianNumber(row.aging_730_plus_value)}}</td>
-                                <td class="text-end fw-bold bg-light">${{totalCount}}</td>
-                                <td class="text-end fw-bold bg-light">${{formatIndianNumber(totalValue)}}</td>
                             </tr>
                         `);
                     }});
@@ -1745,8 +1706,6 @@ HTML_TEMPLATE = """
                             <td class="text-end">${{formatIndianNumber(total.aging_366_730_value)}}</td>
                             <td class="text-end">${{total.aging_730_plus_count}}</td>
                             <td class="text-end">${{formatIndianNumber(total.aging_730_plus_value)}}</td>
-                            <td class="text-end fw-bold border-top border-bottom border-3">${{grandTotalCount}}</td>
-                            <td class="text-end fw-bold border-top border-bottom border-3">${{formatIndianNumber(grandTotalValue)}}</td>
                         </tr>
                     `);
                 }}
