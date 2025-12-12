@@ -509,10 +509,10 @@ HTML_TEMPLATE = """
             <div class="col-12">
                 <div class="card" style="border: 2px solid #007bff;">
                     <div class="card-body">
-                        <h5 class="card-title mb-3">📤 Upload New Excel File (Auto-Updates Dashboard)</h5>
+                        <h5 class="card-title mb-3">📤 Upload inventory details from QlikView</h5>
                         <div class="upload-area" id="uploadArea">
                             <p class="mb-2"><i class="bi bi-cloud-arrow-up" style="font-size: 2rem;"></i></p>
-                            <p class="mb-2"><strong>Drag & Drop Excel file here or click to browse</strong></p>
+                            <p class="mb-2"><strong>Drag & Drop QlikView Excel file here or click to browse</strong></p>
                             <input type="file" id="fileInput" accept=".xlsx,.xls" style="display:none;">
                             <small class="text-muted">Supports .xlsx and .xls files</small>
                         </div>
