@@ -1528,7 +1528,6 @@ HTML_TEMPLATE = """
                                 <th>Stock Qty</th>
                                 <th>GNDP Value</th>
                                 <th>Movement</th>
-                                <th>Dead Stock</th>
                             </tr>
                         </thead>
                         <tbody></tbody>
@@ -1803,10 +1802,6 @@ HTML_TEMPLATE = """
                     $('#dataTable tbody').empty();
                     
                     response.data.forEach(row => {{
-                        const deadStockBadge = row['Is Dead Stock'] ? 
-                            '<span class="badge bg-danger">YES</span>' : 
-                            '<span class="badge bg-success">NO</span>';
-                        
                         $('#dataTable tbody').append(`
                             <tr>
                                 <td>${{row['Part No.'] || ''}}</td>
@@ -1815,7 +1810,6 @@ HTML_TEMPLATE = """
                                 <td>${{row['Stock Qty'] || ''}}</td>
                                 <td>${{row['Stock  at GNDP (Rs.) (In Lac)  '] || ''}}</td>
                                 <td>${{row['Movement Category P (2)'] || ''}}</td>
-                                <td>${{deadStockBadge}}</td>
                             </tr>
                         `);
                     }});
