@@ -1596,7 +1596,7 @@ HTML_TEMPLATE = """
         }}
         
         function uploadFile(file) {{
-            if (!file.name.match(/\.(xlsx|xls)$/)) {{
+            if (!file.name.match(/\\.(xlsx|xls)$/)) {{
                 document.getElementById('uploadStatus').innerHTML = '<div class="alert alert-danger alert-sm" role="alert">❌ Please upload .xlsx or .xls file</div>';
                 return;
             }}
