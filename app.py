@@ -460,17 +460,28 @@ async def upload_excel(file: UploadFile = File(...)):
         last_reload_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         
         print(f"File uploaded successfully!")
-        return {"success": True, "message": f"Uploaded! {len(df):,} records loaded"}
+        return {"success": True, "message": "Uploaded! {} records loaded".format(len(df))}
     except Exception as e:
         print(f"Upload error: {e}")
-        return {"success": False, "message": f"Error: {str(e)}"}
+        return {"success": False, "message": "Error: {}".format(str(e))}
 
-@app.get("/")
-async def dashboard(request: Request):
-    formatted_gndp = format_indian_number(total_gndp)
+def get_html_content(last_update_time, formatted_gndp, locations, part_categories, movement_categories):
+    """Generate HTML content without f-strings to avoid curly brace issues"""
     
-    html_content = f"""
-<!DOCTYPE html>
+    # Build select options
+    movement_options = ""
+    for cat in movement_categories:
+        movement_options += '                    <option value="' + cat + '">' + cat + '</option>\n'
+    
+    part_cat_options = ""
+    for cat in part_categories:
+        part_cat_options += '                    <option value="' + cat + '">' + cat + '</option>\n'
+    
+    location_options = ""
+    for loc in locations:
+        location_options += '                    <option value="' + loc + '">' + loc + '</option>\n'
+    
+    html = """<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -482,7 +493,7 @@ async def dashboard(request: Request):
 <body>
     <div class="container-fluid p-3">
         <h1 class="mb-2">Unnati Motors Mahindra Spare Parts Ageing Dashboard</h1>
-        <p id="lastUpdateTime" class="mb-3">Last Updated: {last_reload_time}</p>
+        <p id="lastUpdateTime" class="mb-3">Last Updated: """ + last_update_time + """</p>
         
         <div id="uploadArea" class="card border-primary mb-4">
             <div class="card-body text-center">
@@ -534,7 +545,7 @@ async def dashboard(request: Request):
 
         <div class="card bg-primary text-white mb-3">
             <div class="card-body">
-                <div style="font-size: 1.5rem; font-weight: bold;">{formatted_gndp}</div>
+                <div style="font-size: 1.5rem; font-weight: bold;">""" + formatted_gndp + """</div>
                 <p class="mb-0">Total Stock at GNDP Value</p>
             </div>
         </div>
@@ -544,36 +555,21 @@ async def dashboard(request: Request):
                 <label>Spare Ageing</label>
                 <select id="movementCategory" class="form-select" onchange="applyFilters()">
                     <option value="">All</option>
-"""
-    
-    for cat in movement_categories:
-        html_content += f'                    <option value="{cat}">{cat}</option>\n'
-    
-    html_content += f"""
+""" + movement_options + """
                 </select>
             </div>
             <div class="col-md-2">
                 <label>Part Category</label>
                 <select id="partCategory" class="form-select" onchange="applyFilters()">
                     <option value="">All</option>
-"""
-    
-    for cat in part_categories:
-        html_content += f'                    <option value="{cat}">{cat}</option>\n'
-    
-    html_content += f"""
+""" + part_cat_options + """
                 </select>
             </div>
             <div class="col-md-2">
                 <label>Location</label>
                 <select id="location" class="form-select" onchange="applyFilters()">
                     <option value="">All</option>
-"""
-    
-    for loc in locations:
-        html_content += f'                    <option value="{loc}">{loc}</option>\n'
-    
-    html_content += f"""
+""" + location_options + """
                 </select>
             </div>
         </div>
@@ -620,15 +616,20 @@ async def dashboard(request: Request):
         const uploadArea = document.getElementById('uploadArea');
         const fileInput = document.getElementById('fileInput');
 
-        uploadArea.addEventListener('click', () => fileInput.click());
-        uploadArea.addEventListener('dragover', (e) => {
+        uploadArea.addEventListener('click', function() {
+            fileInput.click();
+        });
+        
+        uploadArea.addEventListener('dragover', function(e) {
             e.preventDefault();
             uploadArea.style.borderColor = '#007bff';
         });
-        uploadArea.addEventListener('dragleave', () => {
+        
+        uploadArea.addEventListener('dragleave', function() {
             uploadArea.style.borderColor = '#ccc';
         });
-        uploadArea.addEventListener('drop', (e) => {
+        
+        uploadArea.addEventListener('drop', function(e) {
             e.preventDefault();
             const files = e.dataTransfer.files;
             if (files.length > 0) {
@@ -636,7 +637,7 @@ async def dashboard(request: Request):
             }
         });
 
-        fileInput.addEventListener('change', (e) => {
+        fileInput.addEventListener('change', function(e) {
             if (e.target.files.length > 0) {
                 uploadFile(e.target.files[0]);
             }
@@ -646,21 +647,21 @@ async def dashboard(request: Request):
             const formData = new FormData();
             formData.append('file', file);
             
-            fetch('/upload-excel', {{method: 'POST', body: formData}})
+            fetch('/upload-excel', {method: 'POST', body: formData})
                 .then(r => r.json())
-                .then(data => {{
+                .then(data => {
                     alert(data.message);
                     location.reload();
-                }})
+                })
                 .catch(e => alert('Error: ' + e));
         }
 
         function getFilters() {
-            return {{
+            return {
                 movement_category: document.getElementById('movementCategory').value,
                 part_category: document.getElementById('partCategory').value,
                 location: document.getElementById('location').value
-            }};
+            };
         }
 
         function clearFilters() {
@@ -676,61 +677,67 @@ async def dashboard(request: Request):
 
         function updateDataTable(page) {
             const filters = getFilters();
-            const params = new URLSearchParams({{...filters, page, per_page: 50}});
+            const params = new URLSearchParams(Object.assign({}, filters, {page: page, per_page: 50}));
             
-            fetch(`/data?${{params}}`)
+            fetch('/data?' + params.toString())
                 .then(r => r.json())
-                .then(data => {{
+                .then(data => {
                     document.getElementById('recordCount').textContent = data.total_records;
                     let html = '';
-                    data.data.forEach(row => {{
-                        html += `<tr>
-                            <td>${{row.Location || '-'}}</td>
-                            <td>${{row['Part No'] || '-'}}</td>
-                            <td>${{row['Part Description'] || '-'}}</td>
-                            <td>${{row['Part Category'] || '-'}}</td>
-                            <td>${{row['Stock Qty'] || 0}}</td>
-                            <td>${{formatNumber(row['Stock at GNDP'] || 0)}}</td>
-                            <td>${{row['Last Issue Date'] || '-'}}</td>
-                            <td>${{row['Last Purchase Date'] || '-'}}</td>
-                            <td>${{row['Movement Category P (2)'] || '-'}}</td>
-                            <td>${{row['Is Dead Stock'] ? 'Yes' : 'No'}}</td>
-                        </tr>`;
-                    }});
+                    data.data.forEach(row => {
+                        const location = row.Location || '-';
+                        const partNo = row['Part No'] || '-';
+                        const description = row['Part Description'] || '-';
+                        const category = row['Part Category'] || '-';
+                        const qty = row['Stock Qty'] || 0;
+                        const gndp = formatNumber(row['Stock at GNDP'] || 0);
+                        const issueDate = row['Last Issue Date'] || '-';
+                        const purchaseDate = row['Last Purchase Date'] || '-';
+                        const movementCat = row['Movement Category P (2)'] || '-';
+                        const deadStock = row['Is Dead Stock'] ? 'Yes' : 'No';
+                        
+                        html += '<tr><td>' + location + '</td><td>' + partNo + '</td><td>' + description + '</td><td>' + category + '</td><td>' + qty + '</td><td>' + gndp + '</td><td>' + issueDate + '</td><td>' + purchaseDate + '</td><td>' + movementCat + '</td><td>' + deadStock + '</td></tr>';
+                    });
                     document.getElementById('dataTableBody').innerHTML = html;
 
                     let paginationHtml = '';
-                    for (let i = 1; i <= data.total_pages; i++) {{
-                        paginationHtml += `<li class="page-item ${{i === page ? 'active' : ''}}"><a class="page-link" href="#" onclick="updateDataTable(${{i}}); return false;">${{i}}</a></li>`;
-                    }}
+                    for (let i = 1; i <= data.total_pages; i++) {
+                        const active = i === page ? 'active' : '';
+                        paginationHtml += '<li class="page-item ' + active + '"><a class="page-link" href="#" onclick="updateDataTable(' + i + '); return false;">' + i + '</a></li>';
+                    }
                     document.getElementById('pagination').innerHTML = paginationHtml;
-                }});
+                });
         }
 
-        function formatNumber(num) {{
+        function formatNumber(num) {
             if (!num || isNaN(num)) return '0';
-            return num.toLocaleString('en-IN', {{maximumFractionDigits: 2}});
-        }}
+            return num.toLocaleString('en-IN', {maximumFractionDigits: 2});
+        }
 
-        function downloadDeadStock(category) {{
+        function downloadDeadStock(category) {
             const filters = getFilters();
             const params = new URLSearchParams(filters);
-            window.location.href = `/download-csv?${{params}}`;
-        }}
+            window.location.href = '/download-csv?' + params.toString();
+        }
 
-        function downloadData() {{
+        function downloadData() {
             const filters = getFilters();
             const params = new URLSearchParams(filters);
-            window.location.href = `/download-csv?${{params}}`;
-        }}
+            window.location.href = '/download-csv?' + params.toString();
+        }
 
         applyFilters();
     </script>
 </body>
-</html>
-"""
+</html>"""
     
-    return HTMLResponse(content=html_content)
+    return html
+
+@app.get("/")
+async def dashboard(request: Request):
+    formatted_gndp = format_indian_number(total_gndp)
+    html = get_html_content(last_reload_time, formatted_gndp, locations, part_categories, movement_categories)
+    return HTMLResponse(content=html)
 
 def apply_filters(filtered_df, movement_category, part_category, location):
     if movement_category:
@@ -775,7 +782,7 @@ async def download_csv(
 ):
     filtered_df = apply_filters(df.copy(), movement_category, part_category, location)
     current_datetime = datetime.now().strftime("%d-%m-%Y_%H-%M-%S")
-    filename = f"Details_{current_datetime}.csv"
+    filename = "Details_{}.csv".format(current_datetime)
     
     reports_dir = "./Reports"
     if not os.path.exists(reports_dir):
@@ -795,9 +802,9 @@ if __name__ == "__main__":
     port = int(os.getenv("PORT", 8004))
     
     print("\n" + "=" * 70)
-    print(f"Server ready!")
-    print(f"Local: http://localhost:{port}")
-    print(f"Network: http://{local_ip}:{port}")
+    print("Server ready!")
+    print("Local: http://localhost:{}".format(port))
+    print("Network: http://{}:{}".format(local_ip, port))
     print("=" * 70)
     
     uvicorn.run(app, host="0.0.0.0", port=port)
