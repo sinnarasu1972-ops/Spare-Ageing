@@ -9,4 +9,3 @@ services:
       - key: PYTHONUNBUFFERED
         value: "1"
     healthCheckPath: /health
-  
