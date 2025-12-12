@@ -1304,9 +1304,9 @@ HTML_TEMPLATE = """
         <!-- HEADER + UPLOAD -->
         <div class="header-upload-container">
             <div class="header-section">
-                <h1>📊 Unnati Motors</h1>
-                <p class="subtitle">Mahindra Spare Parts Ageing Dashboard</p>
-                <small style="opacity: 0.8; margin-top: 10px;">Last Updated: {last_reload_time}</small>
+                <h1>📊 Unnati Motors Mahindra</h1>
+                <p class="subtitle">Spare Parts Ageing Dashboard</p>
+                <small style="opacity: 0.8; margin-top: 5px; display: block;">Last Updated: {last_reload_time}</small>
             </div>
             
             <div class="upload-section">
@@ -1479,6 +1479,36 @@ HTML_TEMPLATE = """
             </div>
         </div>
         
+        <!-- LOCATION WISE PART CATEGORY TABLE -->
+        <div class="card mb-4">
+            <div class="card-body">
+                <div class="row align-items-center">
+                    <div class="col-md-6">
+                        <h5 class="mb-0">Location Wise Part Category</h5>
+                    </div>
+                    <div class="col-md-6 text-end">
+                        <button id="downloadPartCategoryCsv" class="btn btn-info btn-sm">
+                            <i class="bi bi-download"></i> Download Part Category
+                        </button>
+                    </div>
+                </div>
+                <div class="table-responsive mt-2">
+                    <table class="table table-striped table-hover table-sm table-bordered" id="partCategoryTable">
+                        <thead class="table-dark">
+                            <tr id="partCategoryHeaders">
+                                <th>Location</th>
+                                <th>Total</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                        <tfoot style="background-color: #ff9800 !important; color: white !important; font-weight: bold !important;">
+                            <tr id="partCategoryTotal"></tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+        </div>
+        
         <!-- DATA TABLE -->
         <div class="card">
             <div class="card-body">
@@ -1630,6 +1660,7 @@ HTML_TEMPLATE = """
         function loadAllData() {{
             loadData();
             loadSummary();
+            loadPartCategorySummary();
             loadDeadStockSummary();
         }}
         
@@ -1714,6 +1745,49 @@ HTML_TEMPLATE = """
                             <td class="text-end fw-bold border-top border-bottom border-3">${{formatIndianNumber(grandTotalValue)}}</td>
                         </tr>
                     `);
+                }}
+            }});
+        }}
+        
+        function loadPartCategorySummary() {{
+            const filters = getFilters();
+            const queryString = buildQueryString(filters);
+            
+            $.ajax({{
+                url: `/location-part-category-summary?${{queryString}}`,
+                method: 'GET',
+                success: function(response) {{
+                    const partCategories = response.part_categories;
+                    let headerHtml = '<th>Location</th>';
+                    partCategories.forEach(cat => {{
+                        headerHtml += `<th>${{cat}}</th>`;
+                    }});
+                    headerHtml += '<th style="background-color: #ffc107; color: #000;">Total</th>';
+                    $('#partCategoryHeaders').html(headerHtml);
+                    
+                    $('#partCategoryTable tbody').empty();
+                    response.summary.forEach(row => {{
+                        let rowHtml = `<tr><td class="fw-bold">${{row.location}}</td>`;
+                        let rowTotal = 0;
+                        partCategories.forEach(cat => {{
+                            const value = row[cat] || 0;
+                            rowHtml += `<td class="text-end">${{formatIndianNumber(value)}}</td>`;
+                            rowTotal += value;
+                        }});
+                        rowHtml += `<td class="text-end fw-bold" style="background-color: #fff3cd; color: #000;">${{formatIndianNumber(rowTotal)}}</td></tr>`;
+                        $('#partCategoryTable tbody').append(rowHtml);
+                    }});
+                    
+                    let footerHtml = '<tr style="background-color: #ff9800; color: white;">';
+                    footerHtml += '<td class="fw-bold" style="color: white; text-align: left; background-color: #ff9800; padding: 0.10rem 0.08rem; font-size: 0.85rem; border: 1px solid #ff5500;">Total</td>';
+                    let grandTotal = 0;
+                    partCategories.forEach(cat => {{
+                        const total = response.total[cat] || 0;
+                        footerHtml += `<td class="fw-bold" style="color: white; text-align: right; background-color: #ff9800; padding: 0.10rem 0.08rem; font-size: 0.85rem; border: 1px solid #ff5500;">${{formatIndianNumber(total)}}</td>`;
+                        grandTotal += total;
+                    }});
+                    footerHtml += `<td class="fw-bold" style="color: white; text-align: right; background-color: #ff9800; padding: 0.10rem 0.08rem; font-size: 0.85rem; border: 1px solid #ff5500;">${{formatIndianNumber(grandTotal)}}</td></tr>`;
+                    $('#partCategoryTable tfoot').html(footerHtml);
                 }}
             }});
         }}
@@ -1826,6 +1900,12 @@ HTML_TEMPLATE = """
                 const filters = getFilters();
                 const queryString = buildQueryString(filters);
                 window.location.href = `/download-summary-csv?${{queryString}}`;
+            }});
+            
+            $('#downloadPartCategoryCsv').click(function() {{
+                const filters = getFilters();
+                const queryString = buildQueryString(filters);
+                window.location.href = `/download-part-category-csv?${{queryString}}`;
             }});
             
             $('#btnDeadStockCurrent').click(function() {{
