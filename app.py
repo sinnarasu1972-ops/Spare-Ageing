@@ -579,16 +579,20 @@ async def dashboard():
     """Main dashboard endpoint"""
     formatted_gndp = format_indian_number(total_gndp)
     
-    html = HTML_TEMPLATE.format(
-        formatted_gndp=formatted_gndp,
-        last_reload_time=last_reload_time,
-        total_records=len(df),
-        movement_categories=movement_categories,
-        part_categories=part_categories,
-        locations=locations,
-        abc_categories=abc_categories,
-        ris_values=ris_values
-    )
+    movement_options = '\n'.join([f'<option value="{cat}">{cat}</option>' for cat in movement_categories])
+    part_cat_options = '\n'.join([f'<option value="{cat}">{cat}</option>' for cat in part_categories])
+    abc_options = '\n'.join([f'<option value="{cat}">{cat}</option>' for cat in abc_categories])
+    ris_options = '\n'.join([f'<option value="{val}">{val}</option>' for val in ris_values])
+    locations_options = '\n'.join([f'<option value="{loc}">{loc}</option>' for loc in locations])
+    
+    html = HTML_TEMPLATE.replace('{formatted_gndp}', formatted_gndp)
+    html = html.replace('{last_reload_time}', last_reload_time)
+    html = html.replace('{total_records}', str(len(df)))
+    html = html.replace('{movement_categories_options}', movement_options)
+    html = html.replace('{part_categories_options}', part_cat_options)
+    html = html.replace('{abc_categories_options}', abc_options)
+    html = html.replace('{ris_values_options}', ris_options)
+    html = html.replace('{locations_options}', locations_options)
     
     return HTMLResponse(content=html)
 
@@ -1118,9 +1122,8 @@ async def download_last_month_liquidation_csv(
     return FileResponse(path=output_path, filename=filename, media_type='text/csv')
 
 # ============= HTML TEMPLATE =============
-
-HTML_TEMPLATE = """
-<!DOCTYPE html>
+# This is loaded from separate file to avoid escaping issues
+HTML_TEMPLATE = """<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -1131,7 +1134,7 @@ HTML_TEMPLATE = """
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-select@1.14.0-beta2/dist/css/bootstrap-select.min.css">
     <link rel="stylesheet" href="/static/style.css">
     <style>
-        :root {{
+        :root {
             --primary: #2563eb;
             --secondary: #64748b;
             --danger: #ef4444;
@@ -1139,17 +1142,17 @@ HTML_TEMPLATE = """
             --warning: #f59e0b;
             --dark: #1e293b;
             --light: #f1f5f9;
-        }}
+        }
         
-        .header-upload-container {{
+        .header-upload-container {
             display: flex;
             gap: 20px;
             align-items: stretch;
             margin-bottom: 20px;
             flex-wrap: wrap;
-        }}
+        }
         
-        .header-section {{
+        .header-section {
             flex: 1;
             min-width: 300px;
             background: linear-gradient(135deg, var(--primary) 0%, #1e40af 100%);
@@ -1157,21 +1160,21 @@ HTML_TEMPLATE = """
             padding: 25px;
             border-radius: 12px;
             box-shadow: 0 4px 15px rgba(37, 99, 235, 0.2);
-        }}
+        }
         
-        .header-section h1 {{
+        .header-section h1 {
             font-size: 1.8rem;
             margin: 0;
             font-weight: 700;
-        }}
+        }
         
-        .header-section .subtitle {{
+        .header-section .subtitle {
             font-size: 0.9rem;
             opacity: 0.9;
             margin-top: 5px;
-        }}
+        }
         
-        .upload-section {{
+        .upload-section {
             flex: 0 0 auto;
             width: 350px;
             background: white;
@@ -1179,15 +1182,15 @@ HTML_TEMPLATE = """
             border-radius: 12px;
             border: 2px dashed var(--primary);
             box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-        }}
+        }
         
-        .upload-section h5 {{
+        .upload-section h5 {
             font-size: 0.95rem;
             margin-bottom: 12px;
             color: var(--dark);
-        }}
+        }
         
-        .upload-area {{
+        .upload-area {
             border: 2px dashed var(--primary);
             border-radius: 8px;
             padding: 15px;
@@ -1195,77 +1198,77 @@ HTML_TEMPLATE = """
             cursor: pointer;
             transition: all 0.3s;
             background: var(--light);
-        }}
+        }
         
-        .upload-area:hover {{
+        .upload-area:hover {
             background-color: rgba(37, 99, 235, 0.08);
             border-color: #1e40af;
-        }}
+        }
         
-        .upload-area.dragover {{
+        .upload-area.dragover {
             background-color: rgba(37, 99, 235, 0.15);
             border-color: #1e40af;
-        }}
+        }
         
-        .dead-stock-grid {{
+        .dead-stock-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
             gap: 15px;
-        }}
+        }
         
-        .dead-stock-card {{
+        .dead-stock-card {
             background: white;
             padding: 18px;
             border-radius: 10px;
             border-left: 5px solid var(--primary);
             box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-        }}
+        }
         
-        .dead-stock-card.current {{ border-left-color: #ef4444; }}
-        .dead-stock-card.last {{ border-left-color: #8b5cf6; }}
-        .dead-stock-card.last-to-last {{ border-left-color: #10b981; }}
-        .dead-stock-card.total {{ border-left-color: #f59e0b; }}
-        .dead-stock-card.liquidation {{ border-left-color: #f97316; }}
+        .dead-stock-card.current { border-left-color: #ef4444; }
+        .dead-stock-card.last { border-left-color: #8b5cf6; }
+        .dead-stock-card.last-to-last { border-left-color: #10b981; }
+        .dead-stock-card.total { border-left-color: #f59e0b; }
+        .dead-stock-card.liquidation { border-left-color: #f97316; }
         
-        .dead-stock-card h6 {{
+        .dead-stock-card h6 {
             font-size: 0.85rem;
             color: var(--secondary);
             margin-bottom: 8px;
             font-weight: 600;
-        }}
+        }
         
-        .dead-stock-card .count {{
+        .dead-stock-card .count {
             font-size: 2rem;
             font-weight: 700;
             color: var(--dark);
             margin-bottom: 5px;
-        }}
+        }
         
-        .dead-stock-card .value {{
+        .dead-stock-card .value {
             font-size: 0.85rem;
             color: var(--secondary);
-        }}
+        }
         
-        .filter-card {{
+        .filter-card {
             background: white;
             padding: 15px;
             border-radius: 10px;
             box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-        }}
+        }
         
-        @media (max-width: 768px) {{
-            .header-upload-container {{
+        @media (max-width: 768px) {
+            .header-upload-container {
                 flex-direction: column;
-            }}
+            }
             
-            .upload-section {{
+            .upload-section {
                 width: 100%;
-            }}
+            }
             
-            .dead-stock-grid {{
+            .dead-stock-grid {
                 grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-            }}
-        }}
+            }
+        }
     </style>
 </head>
 <body>
@@ -1517,103 +1520,103 @@ HTML_TEMPLATE = """
         const perPage = 25;
         let isDataLoaded = false;
         
-        $(document).ready(function() {{
+        $(document).ready(function() {
             $('.selectpicker').selectpicker();
             setupFileUpload();
             setupEventListeners();
             
-            setTimeout(() => {{
-                if (!isDataLoaded) {{
+            setTimeout(() => {
+                if (!isDataLoaded) {
                     loadAllData();
                     isDataLoaded = true;
-                }}
-            }}, 500);
-        }});
+                }
+            }, 500);
+        });
         
-        function setupFileUpload() {{
+        function setupFileUpload() {
             const uploadArea = document.getElementById('uploadArea');
             const fileInput = document.getElementById('fileInput');
             const uploadStatus = document.getElementById('uploadStatus');
             
             uploadArea.addEventListener('click', () => fileInput.click());
             
-            uploadArea.addEventListener('dragover', (e) => {{
+            uploadArea.addEventListener('dragover', (e) => {
                 e.preventDefault();
                 uploadArea.classList.add('dragover');
-            }});
+            });
             
-            uploadArea.addEventListener('dragleave', () => {{
+            uploadArea.addEventListener('dragleave', () => {
                 uploadArea.classList.remove('dragover');
-            }});
+            });
             
-            uploadArea.addEventListener('drop', (e) => {{
+            uploadArea.addEventListener('drop', (e) => {
                 e.preventDefault();
                 uploadArea.classList.remove('dragover');
                 const files = e.dataTransfer.files;
-                if (files.length > 0) {{
+                if (files.length > 0) {
                     uploadFile(files[0]);
-                }}
-            }});
+                }
+            });
             
-            fileInput.addEventListener('change', (e) => {{
-                if (e.target.files.length > 0) {{
+            fileInput.addEventListener('change', (e) => {
+                if (e.target.files.length > 0) {
                     uploadFile(e.target.files[0]);
-                }}
-            }});
-        }}
+                }
+            });
+        }
         
-        function uploadFile(file) {{
-            if (!file.name.match(/\\.(xlsx|xls)$/)) {{
+        function uploadFile(file) {
+            if (!file.name.match(/\.(xlsx|xls)$/)) {
                 document.getElementById('uploadStatus').innerHTML = '<div class="alert alert-danger alert-sm" role="alert">❌ Please upload .xlsx or .xls file</div>';
                 return;
-            }}
+            }
             
             document.getElementById('uploadStatus').innerHTML = '<div class="alert alert-info alert-sm" role="alert">⏳ Uploading...</div>';
             
             const formData = new FormData();
             formData.append('file', file);
             
-            $.ajax({{
+            $.ajax({
                 url: '/upload-excel',
                 type: 'POST',
                 data: formData,
                 processData: false,
                 contentType: false,
-                success: function(res) {{
+                success: function(res) {
                     document.getElementById('uploadStatus').innerHTML = '<div class="alert alert-success alert-sm" role="alert">✅ ' + res.message + '</div>';
-                    setTimeout(() => {{
+                    setTimeout(() => {
                         location.reload();
-                    }}, 2000);
-                }},
-                error: function(err) {{
+                    }, 2000);
+                },
+                error: function(err) {
                     document.getElementById('uploadStatus').innerHTML = '<div class="alert alert-danger alert-sm" role="alert">❌ Upload failed</div>';
-                }}
-            }});
-        }}
+                }
+            });
+        }
         
-        function formatIndianNumber(num) {{
+        function formatIndianNumber(num) {
             if (num === null || num === undefined || isNaN(num)) return '0';
             const actualValue = Math.round(num * 100000);
             let numStr = Math.abs(actualValue).toString();
             let lastThree = numStr.substring(numStr.length - 3);
             let otherNumbers = numStr.substring(0, numStr.length - 3);
             if (otherNumbers !== '') lastThree = ',' + lastThree;
-            let result = otherNumbers.replace(/\\B(?=(\\d{{2}})+(?!\\d))/g, ',') + lastThree;
+            let result = otherNumbers.replace(/\B(?=(\d{2})+(?!\d))/g, ',') + lastThree;
             return actualValue < 0 ? '-' + result : result;
-        }}
+        }
         
-        function getFilters() {{
-            return {{
+        function getFilters() {
+            return {
                 movementCategory: $('#movementCategory').val() || [],
                 partCategory: $('#partCategory').val() || [],
                 location: $('#location').val() || [],
                 abcCategory: $('#abcCategory').val() || [],
                 ris: $('#ris').val() || [],
                 partNumber: $('#partNumber').val().trim()
-            }};
-        }}
+            };
+        }
         
-        function buildQueryString(filters) {{
+        function buildQueryString(filters) {
             const params = new URLSearchParams();
             if (filters.movementCategory.length) params.append('movement_category', filters.movementCategory.join(','));
             if (filters.partCategory.length) params.append('part_category', filters.partCategory.join(','));
@@ -1622,23 +1625,23 @@ HTML_TEMPLATE = """
             if (filters.ris.length) params.append('ris', filters.ris.join(','));
             if (filters.partNumber) params.append('part_number', filters.partNumber);
             return params.toString();
-        }}
+        }
         
-        function loadAllData() {{
+        function loadAllData() {
             loadData();
             loadSummary();
             loadPartCategorySummary();
             loadDeadStockSummary();
-        }}
+        }
         
-        function loadDeadStockSummary() {{
+        function loadDeadStockSummary() {
             const filters = getFilters();
             const queryString = buildQueryString(filters);
             
-            $.ajax({{
-                url: `/dead-stock-summary?${{queryString}}`,
+            $.ajax({
+                url: `/dead-stock-summary?${queryString}`,
                 method: 'GET',
-                success: function(response) {{
+                success: function(response) {
                     $('#deadStockCurrentAsOnCount').text(response.current_month_as_on_date.count);
                     $('#deadStockCurrentAsOnValue').text('₹' + formatIndianNumber(response.current_month_as_on_date.value));
                     $('#deadStockCurrentCompleteCount').text(response.current_month_complete.count);
@@ -1649,45 +1652,45 @@ HTML_TEMPLATE = """
                     $('#deadStockLastToLastValue').text('₹' + formatIndianNumber(response.last_to_last_month.value));
                     $('#deadStockTotalCount').text(response.total.count);
                     $('#deadStockTotalValue').text('₹' + formatIndianNumber(response.total.value));
-                    if (response.last_month_liquidation) {{
+                    if (response.last_month_liquidation) {
                         $('#lastMonthLiquidationCount').text(response.last_month_liquidation.count);
                         $('#lastMonthLiquidationValue').text('₹' + formatIndianNumber(response.last_month_liquidation.value));
-                    }}
-                }}
-            }});
-        }}
+                    }
+                }
+            });
+        }
         
-        function loadSummary() {{
+        function loadSummary() {
             const filters = getFilters();
             const queryString = buildQueryString(filters);
             
-            $.ajax({{
-                url: `/summary?${{queryString}}`,
+            $.ajax({
+                url: `/summary?${queryString}`,
                 method: 'GET',
-                success: function(response) {{
+                success: function(response) {
                     $('#summaryTable tbody').empty();
                     $('#summaryTable tfoot').empty();
                     
-                    response.summary.forEach(row => {{
+                    response.summary.forEach(row => {
                         const totalCount = row.aging_0_90_count + row.aging_91_180_count + row.aging_181_365_count + row.aging_366_730_count + row.aging_730_plus_count;
                         const totalValue = row.aging_0_90_value + row.aging_91_180_value + row.aging_181_365_value + row.aging_366_730_value + row.aging_730_plus_value;
                         
                         $('#summaryTable tbody').append(`
                             <tr>
-                                <td class="fw-bold">${{row.location}}</td>
-                                <td class="text-end">${{row.aging_0_90_count}}</td>
-                                <td class="text-end">${{formatIndianNumber(row.aging_0_90_value)}}</td>
-                                <td class="text-end">${{row.aging_91_180_count}}</td>
-                                <td class="text-end">${{formatIndianNumber(row.aging_91_180_value)}}</td>
-                                <td class="text-end">${{row.aging_181_365_count}}</td>
-                                <td class="text-end">${{formatIndianNumber(row.aging_181_365_value)}}</td>
-                                <td class="text-end">${{row.aging_366_730_count}}</td>
-                                <td class="text-end">${{formatIndianNumber(row.aging_366_730_value)}}</td>
-                                <td class="text-end">${{row.aging_730_plus_count}}</td>
-                                <td class="text-end">${{formatIndianNumber(row.aging_730_plus_value)}}</td>
+                                <td class="fw-bold">${row.location}</td>
+                                <td class="text-end">${row.aging_0_90_count}</td>
+                                <td class="text-end">${formatIndianNumber(row.aging_0_90_value)}</td>
+                                <td class="text-end">${row.aging_91_180_count}</td>
+                                <td class="text-end">${formatIndianNumber(row.aging_91_180_value)}</td>
+                                <td class="text-end">${row.aging_181_365_count}</td>
+                                <td class="text-end">${formatIndianNumber(row.aging_181_365_value)}</td>
+                                <td class="text-end">${row.aging_366_730_count}</td>
+                                <td class="text-end">${formatIndianNumber(row.aging_366_730_value)}</td>
+                                <td class="text-end">${row.aging_730_plus_count}</td>
+                                <td class="text-end">${formatIndianNumber(row.aging_730_plus_value)}</td>
                             </tr>
                         `);
-                    }});
+                    });
                     
                     const total = response.total;
                     const grandTotalCount = total.aging_0_90_count + total.aging_91_180_count + total.aging_181_365_count + total.aging_366_730_count + total.aging_730_plus_count;
@@ -1696,240 +1699,216 @@ HTML_TEMPLATE = """
                     $('#summaryTable tfoot').html(`
                         <tr class="table-warning fw-bold">
                             <td class="fw-bold">TOTAL</td>
-                            <td class="text-end">${{total.aging_0_90_count}}</td>
-                            <td class="text-end">${{formatIndianNumber(total.aging_0_90_value)}}</td>
-                            <td class="text-end">${{total.aging_91_180_count}}</td>
-                            <td class="text-end">${{formatIndianNumber(total.aging_91_180_value)}}</td>
-                            <td class="text-end">${{total.aging_181_365_count}}</td>
-                            <td class="text-end">${{formatIndianNumber(total.aging_181_365_value)}}</td>
-                            <td class="text-end">${{total.aging_366_730_count}}</td>
-                            <td class="text-end">${{formatIndianNumber(total.aging_366_730_value)}}</td>
-                            <td class="text-end">${{total.aging_730_plus_count}}</td>
-                            <td class="text-end">${{formatIndianNumber(total.aging_730_plus_value)}}</td>
+                            <td class="text-end">${total.aging_0_90_count}</td>
+                            <td class="text-end">${formatIndianNumber(total.aging_0_90_value)}</td>
+                            <td class="text-end">${total.aging_91_180_count}</td>
+                            <td class="text-end">${formatIndianNumber(total.aging_91_180_value)}</td>
+                            <td class="text-end">${total.aging_181_365_count}</td>
+                            <td class="text-end">${formatIndianNumber(total.aging_181_365_value)}</td>
+                            <td class="text-end">${total.aging_366_730_count}</td>
+                            <td class="text-end">${formatIndianNumber(total.aging_366_730_value)}</td>
+                            <td class="text-end">${total.aging_730_plus_count}</td>
+                            <td class="text-end">${formatIndianNumber(total.aging_730_plus_value)}</td>
                         </tr>
                     `);
-                }}
-            }});
-        }}
+                }
+            });
+        }
         
-        function loadPartCategorySummary() {{
+        function loadPartCategorySummary() {
             const filters = getFilters();
             const queryString = buildQueryString(filters);
             
-            $.ajax({{
-                url: `/location-part-category-summary?${{queryString}}`,
+            $.ajax({
+                url: `/location-part-category-summary?${queryString}`,
                 method: 'GET',
-                success: function(response) {{
+                success: function(response) {
                     const partCategories = response.part_categories;
                     let headerHtml = '<th>Location</th>';
-                    partCategories.forEach(cat => {{
-                        headerHtml += `<th>${{cat}}</th>`;
-                    }});
+                    partCategories.forEach(cat => {
+                        headerHtml += `<th>${cat}</th>`;
+                    });
                     headerHtml += '<th style="background-color: #ffc107; color: #000;">Total</th>';
                     $('#partCategoryHeaders').html(headerHtml);
                     
                     $('#partCategoryTable tbody').empty();
-                    response.summary.forEach(row => {{
-                        let rowHtml = `<tr><td class="fw-bold">${{row.location}}</td>`;
+                    response.summary.forEach(row => {
+                        let rowHtml = `<tr><td class="fw-bold">${row.location}</td>`;
                         let rowTotal = 0;
-                        partCategories.forEach(cat => {{
+                        partCategories.forEach(cat => {
                             const value = row[cat] || 0;
-                            rowHtml += `<td class="text-end">${{formatIndianNumber(value)}}</td>`;
+                            rowHtml += `<td class="text-end">${formatIndianNumber(value)}</td>`;
                             rowTotal += value;
-                        }});
-                        rowHtml += `<td class="text-end fw-bold" style="background-color: #fff3cd; color: #000;">${{formatIndianNumber(rowTotal)}}</td></tr>`;
+                        });
+                        rowHtml += `<td class="text-end fw-bold" style="background-color: #fff3cd; color: #000;">${formatIndianNumber(rowTotal)}</td></tr>`;
                         $('#partCategoryTable tbody').append(rowHtml);
-                    }});
+                    });
                     
                     let footerHtml = '<tr style="background-color: #ff9800; color: white;">';
                     footerHtml += '<td class="fw-bold" style="color: white; text-align: left; background-color: #ff9800; padding: 0.10rem 0.08rem; font-size: 0.85rem; border: 1px solid #ff5500;">Total</td>';
                     let grandTotal = 0;
-                    partCategories.forEach(cat => {{
+                    partCategories.forEach(cat => {
                         const total = response.total[cat] || 0;
-                        footerHtml += `<td class="fw-bold" style="color: white; text-align: right; background-color: #ff9800; padding: 0.10rem 0.08rem; font-size: 0.85rem; border: 1px solid #ff5500;">${{formatIndianNumber(total)}}</td>`;
+                        footerHtml += `<td class="fw-bold" style="color: white; text-align: right; background-color: #ff9800; padding: 0.10rem 0.08rem; font-size: 0.85rem; border: 1px solid #ff5500;">${formatIndianNumber(total)}</td>`;
                         grandTotal += total;
-                    }});
-                    footerHtml += `<td class="fw-bold" style="color: white; text-align: right; background-color: #ff9800; padding: 0.10rem 0.08rem; font-size: 0.85rem; border: 1px solid #ff5500;">${{formatIndianNumber(grandTotal)}}</td></tr>`;
+                    });
+                    footerHtml += `<td class="fw-bold" style="color: white; text-align: right; background-color: #ff9800; padding: 0.10rem 0.08rem; font-size: 0.85rem; border: 1px solid #ff5500;">${formatIndianNumber(grandTotal)}</td></tr>`;
                     $('#partCategoryTable tfoot').html(footerHtml);
-                }}
-            }});
-        }}
+                }
+            });
+        }
         
-        function loadData() {{
+        function loadData() {
             const filters = getFilters();
             const queryString = buildQueryString(filters);
             
-            $.ajax({{
-                url: `/data?page=${{currentPage}}&per_page=${{perPage}}&${{queryString}}`,
+            $.ajax({
+                url: `/data?page=${currentPage}&per_page=${perPage}&${queryString}`,
                 method: 'GET',
-                success: function(response) {{
+                success: function(response) {
                     $('#dataTable tbody').empty();
                     
-                    response.data.forEach(row => {{
+                    response.data.forEach(row => {
                         $('#dataTable tbody').append(`
                             <tr>
-                                <td>${{row['Part No.'] || ''}}</td>
-                                <td>${{row['Part Description'] || ''}}</td>
-                                <td>${{row.Location || ''}}</td>
-                                <td>${{row['Stock Qty'] || ''}}</td>
-                                <td>${{row['Stock  at GNDP (Rs.) (In Lac)  '] || ''}}</td>
-                                <td>${{row['Movement Category P (2)'] || ''}}</td>
+                                <td>${row['Part No.'] || ''}</td>
+                                <td>${row['Part Description'] || ''}</td>
+                                <td>${row.Location || ''}</td>
+                                <td>${row['Stock Qty'] || ''}</td>
+                                <td>${row['Stock  at GNDP (Rs.) (In Lac)  '] || ''}</td>
+                                <td>${row['Movement Category P (2)'] || ''}</td>
                             </tr>
                         `);
-                    }});
+                    });
                     
                     updatePagination(response.total_pages, response.page);
-                    $('#recordCount').text(`(${{response.total_records}} Records)`);
+                    $('#recordCount').text(`(${response.total_records} Records)`);
                     updateGNDP();
-                }}
-            }});
-        }}
+                }
+            });
+        }
         
-        function updateGNDP() {{
+        function updateGNDP() {
             const filters = getFilters();
             const queryString = buildQueryString(filters);
-            $.ajax({{
-                url: `/calculate-gndp?${{queryString}}`,
+            $.ajax({
+                url: `/calculate-gndp?${queryString}`,
                 method: 'GET',
-                success: function(response) {{
+                success: function(response) {
                     $('#totalGndp').text(formatIndianNumber(response.total_gndp));
-                }}
-            }});
-        }}
+                }
+            });
+        }
         
-        function updatePagination(totalPages, currentPage) {{
+        function updatePagination(totalPages, currentPage) {
             $('#pagination').empty();
             if (totalPages === 0) return;
             
             $('#pagination').append(`
-                <li class="page-item ${{currentPage === 1 ? 'disabled' : ''}}">
-                    <a class="page-link" href="#" data-page="${{currentPage - 1}}">Previous</a>
+                <li class="page-item ${currentPage === 1 ? 'disabled' : ''}">
+                    <a class="page-link" href="#" data-page="${currentPage - 1}">Previous</a>
                 </li>
             `);
             
-            for (let i = 1; i <= totalPages; i++) {{
-                if (i === 1 || i === totalPages || (i >= currentPage - 2 && i <= currentPage + 2)) {{
+            for (let i = 1; i <= totalPages; i++) {
+                if (i === 1 || i === totalPages || (i >= currentPage - 2 && i <= currentPage + 2)) {
                     $('#pagination').append(`
-                        <li class="page-item ${{i === currentPage ? 'active' : ''}}">
-                            <a class="page-link" href="#" data-page="${{i}}">${{i}}</a>
+                        <li class="page-item ${i === currentPage ? 'active' : ''}">
+                            <a class="page-link" href="#" data-page="${i}">${i}</a>
                         </li>
                     `);
-                }} else if (i === currentPage - 3 || i === currentPage + 3) {{
+                } else if (i === currentPage - 3 || i === currentPage + 3) {
                     $('#pagination').append(`<li class="page-item disabled"><a class="page-link" href="#">...</a></li>`);
-                }}
-            }}
+                }
+            }
             
             $('#pagination').append(`
-                <li class="page-item ${{currentPage === totalPages ? 'disabled' : ''}}">
-                    <a class="page-link" href="#" data-page="${{currentPage + 1}}">Next</a>
+                <li class="page-item ${currentPage === totalPages ? 'disabled' : ''}">
+                    <a class="page-link" href="#" data-page="${currentPage + 1}">Next</a>
                 </li>
             `);
-        }}
+        }
         
-        function setupEventListeners() {{
-            $('#applyFilters').click(function() {{
+        function setupEventListeners() {
+            $('#applyFilters').click(function() {
                 currentPage = 1;
                 loadAllData();
-            }});
+            });
             
-            $('#clearFilters').click(function() {{
+            $('#clearFilters').click(function() {
                 $('.selectpicker').selectpicker('deselectAll');
                 $('#partNumber').val('');
                 currentPage = 1;
                 loadAllData();
-            }});
+            });
             
-            $(document).on('click', '.page-link', function(e) {{
+            $(document).on('click', '.page-link', function(e) {
                 e.preventDefault();
                 const page = parseInt($(this).data('page'));
-                if (page > 0) {{
+                if (page > 0) {
                     currentPage = page;
                     loadData();
-                }}
-            }});
+                }
+            });
             
-            $('#downloadCsv').click(function() {{
+            $('#downloadCsv').click(function() {
                 const filters = getFilters();
                 const queryString = buildQueryString(filters);
-                window.location.href = `/download-csv?${{queryString}}`;
-            }});
+                window.location.href = `/download-csv?${queryString}`;
+            });
             
-            $('#downloadSummaryCsv').click(function() {{
+            $('#downloadSummaryCsv').click(function() {
                 const filters = getFilters();
                 const queryString = buildQueryString(filters);
-                window.location.href = `/download-summary-csv?${{queryString}}`;
-            }});
+                window.location.href = `/download-summary-csv?${queryString}`;
+            });
             
-            $('#downloadPartCategoryCsv').click(function() {{
+            $('#downloadPartCategoryCsv').click(function() {
                 const filters = getFilters();
                 const queryString = buildQueryString(filters);
-                window.location.href = `/download-part-category-csv?${{queryString}}`;
-            }});
+                window.location.href = `/download-part-category-csv?${queryString}`;
+            });
             
-            $('#btnDeadStockCurrent').click(function() {{
+            $('#btnDeadStockCurrent').click(function() {
                 const filters = getFilters();
                 const queryString = buildQueryString(filters);
-                window.location.href = `/download-dead-stock-csv?dead_stock_category=current_month_as_on_date&${{queryString}}`;
-            }});
+                window.location.href = `/download-dead-stock-csv?dead_stock_category=current_month_as_on_date&${queryString}`;
+            });
             
-            $('#btnDeadStockCurrentComplete').click(function() {{
+            $('#btnDeadStockCurrentComplete').click(function() {
                 const filters = getFilters();
                 const queryString = buildQueryString(filters);
-                window.location.href = `/download-dead-stock-csv?dead_stock_category=current_month_complete&${{queryString}}`;
-            }});
+                window.location.href = `/download-dead-stock-csv?dead_stock_category=current_month_complete&${queryString}`;
+            });
             
-            $('#btnDeadStockLast').click(function() {{
+            $('#btnDeadStockLast').click(function() {
                 const filters = getFilters();
                 const queryString = buildQueryString(filters);
-                window.location.href = `/download-dead-stock-csv?dead_stock_category=last_month&${{queryString}}`;
-            }});
+                window.location.href = `/download-dead-stock-csv?dead_stock_category=last_month&${queryString}`;
+            });
             
-            $('#btnDeadStockLastToLast').click(function() {{
+            $('#btnDeadStockLastToLast').click(function() {
                 const filters = getFilters();
                 const queryString = buildQueryString(filters);
-                window.location.href = `/download-dead-stock-csv?dead_stock_category=last_to_last_month&${{queryString}}`;
-            }});
+                window.location.href = `/download-dead-stock-csv?dead_stock_category=last_to_last_month&${queryString}`;
+            });
             
-            $('#btnDeadStockAll').click(function() {{
+            $('#btnDeadStockAll').click(function() {
                 const filters = getFilters();
                 const queryString = buildQueryString(filters);
-                window.location.href = `/download-dead-stock-csv?dead_stock_category=all&${{queryString}}`;
-            }});
+                window.location.href = `/download-dead-stock-csv?dead_stock_category=all&${queryString}`;
+            });
             
-            $('#btnLastMonthLiquidation').click(function() {{
+            $('#btnLastMonthLiquidation').click(function() {
                 const filters = getFilters();
                 const queryString = buildQueryString(filters);
-                window.location.href = `/download-last-month-liquidation-csv?${{queryString}}`;
-            }});
-        }}
+                window.location.href = `/download-last-month-liquidation-csv?${queryString}`;
+            });
+        }
     </script>
 </body>
 </html>
 """
-
-# ============= FORMAT OPTIONS =============
-
-def get_movement_options():
-    return '\n'.join([f'<option value="{cat}">{cat}</option>' for cat in movement_categories])
-
-def get_part_category_options():
-    return '\n'.join([f'<option value="{cat}">{cat}</option>' for cat in part_categories])
-
-def get_abc_category_options():
-    return '\n'.join([f'<option value="{cat}">{cat}</option>' for cat in abc_categories])
-
-def get_ris_options():
-    return '\n'.join([f'<option value="{val}">{val}</option>' for val in ris_values])
-
-def get_locations_options():
-    return '\n'.join([f'<option value="{loc}">{loc}</option>' for loc in locations])
-
-# Update template with options
-HTML_TEMPLATE = HTML_TEMPLATE.replace('{movement_categories_options}', get_movement_options())
-HTML_TEMPLATE = HTML_TEMPLATE.replace('{part_categories_options}', get_part_category_options())
-HTML_TEMPLATE = HTML_TEMPLATE.replace('{abc_categories_options}', get_abc_category_options())
-HTML_TEMPLATE = HTML_TEMPLATE.replace('{ris_values_options}', get_ris_options())
-HTML_TEMPLATE = HTML_TEMPLATE.replace('{locations_options}', get_locations_options())
 
 # ============= SERVER STARTUP =============
 
