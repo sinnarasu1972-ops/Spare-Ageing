@@ -1122,8 +1122,7 @@ async def download_last_month_liquidation_csv(
     return FileResponse(path=output_path, filename=filename, media_type='text/csv')
 
 # ============= HTML TEMPLATE =============
-# This is loaded from separate file to avoid escaping issues
-HTML_TEMPLATE = """<!DOCTYPE html>
+HTML_TEMPLATE = r"""<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
