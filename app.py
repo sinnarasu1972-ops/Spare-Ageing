@@ -10,15 +10,17 @@ from typing import Optional
 import sys
 import numpy as np
 from pathlib import Path
+import threading
+import time
 
 # ============= GLOBAL VARIABLES =============
-excel_file_path = "./Spares Ageing Report.xlsx"
 csv_file_path = "./Spares Ageing Report_Processed.csv"
-last_file_modified = None
 last_reload_time = None
 df = None
 total_gndp = 0
 gndp_column = None
+excel_error = None
+data_lock = threading.Lock()
 
 # Column references
 location_col = None
@@ -47,29 +49,6 @@ def clean_for_json(df):
     df = df.where(pd.notna(df), None)
     return df
 
-def get_file_modified_time(filepath):
-    """Get file modification time"""
-    try:
-        return os.path.getmtime(filepath)
-    except:
-        return None
-
-def parse_date(date_str):
-    """Parse date from various formats"""
-    if pd.isna(date_str) or date_str == "-" or str(date_str).strip() == "":
-        return None
-    try:
-        date_part = str(date_str)[:10].strip()
-        date_formats = ['%d/%m/%Y', '%d-%m-%Y', '%Y-%m-%d', '%m/%d/%Y', '%d.%m.%Y']
-        for fmt in date_formats:
-            try:
-                return datetime.strptime(date_part, fmt).date()
-            except:
-                continue
-    except:
-        pass
-    return None
-
 def format_indian_number(num):
     """Format number in Indian numbering system"""
     if num is None or pd.isna(num):
@@ -92,252 +71,90 @@ def format_indian_number(num):
     except:
         return "0"
 
-# ============= EXCEL PROCESSING =============
+# ============= FAST CSV LOADING =============
 
-def process_excel_to_csv():
-    """Process Excel file to CSV with all calculations"""
-    input_file = excel_file_path
-    output_csv = csv_file_path
+def load_csv_fast():
+    """Load CSV file with minimal processing - ULTRA FAST"""
+    global df, total_gndp, gndp_column, excel_error, last_reload_time
+    global location_col, last_issue_col, last_purchase_col, abc_col, ris_col
+    global part_no_col, part_category_col, stock_qty_col, locations, abc_categories
+    global ris_values, part_categories, movement_categories
     
-    print("Processing Excel file to CSV...")
+    print("\n⚡ FAST CSV LOADING...")
+    start_time = time.time()
     
-    if not os.path.exists(input_file):
-        print(f"ERROR: File not found: {input_file}")
-        return None, 0, None
+    if not os.path.exists(csv_file_path):
+        print(f"⚠️  CSV not found: {csv_file_path}")
+        excel_error = f"CSV file not found: {csv_file_path}"
+        return False
     
     try:
-        df = pd.read_excel(input_file)
-        print(f"Successfully loaded {len(df)} rows from Excel")
+        # Fast CSV load
+        print("📖 Reading CSV file...")
+        df = pd.read_csv(csv_file_path, low_memory=False)
+        print(f"✓ Loaded {len(df):,} rows in {time.time() - start_time:.2f}s")
+        
+        # Find columns quickly
+        print("🔍 Finding columns...")
+        for col in df.columns:
+            if 'location' in str(col).lower() and 'dealer' not in str(col).lower():
+                location_col = col
+            elif 'last' in str(col).lower() and 'issue' in str(col).lower() and 'date' in str(col).lower():
+                last_issue_col = col
+            elif 'last' in str(col).lower() and 'purchase' in str(col).lower() and 'date' in str(col).lower():
+                last_purchase_col = col
+            elif 'last' in str(col).lower() and 'issue' in str(col).lower() and 'qty' in str(col).lower():
+                last_issue_qty_col = col
+            elif str(col).upper().strip() == 'ABC':
+                abc_col = col
+            elif str(col).upper().strip() == 'RIS':
+                ris_col = col
+            elif 'part' in str(col).lower() and 'no' in str(col).lower() and 'description' not in str(col).lower():
+                part_no_col = col
+            elif 'part' in str(col).lower() and 'category' in str(col).lower():
+                part_category_col = col
+            elif 'stock' in str(col).lower() and 'qty' in str(col).lower():
+                stock_qty_col = col
+            elif 'stock' in str(col).lower() and 'gndp' in str(col).lower():
+                gndp_column = col
+        
+        # Calculate totals
+        print("📊 Calculating totals...")
+        if gndp_column and gndp_column in df.columns:
+            df[gndp_column] = pd.to_numeric(df[gndp_column], errors='coerce').fillna(0)
+            total_gndp = df[gndp_column].sum()
+        
+        # Pre-compute filter options (FAST)
+        print("⚙️  Pre-computing filters...")
+        locations = sorted([x for x in df[location_col].unique().tolist() if pd.notna(x)]) if location_col in df.columns else []
+        abc_categories = sorted([x for x in df[abc_col].unique().tolist() if pd.notna(x)]) if abc_col and abc_col in df.columns else []
+        ris_values = sorted([x for x in df[ris_col].unique().tolist() if pd.notna(x)]) if ris_col and ris_col in df.columns else []
+        part_categories = sorted([x for x in df[part_category_col].unique().tolist() if pd.notna(x)]) if part_category_col in df.columns else []
+        
+        movement_order = ["0 to 90 days", "91 to 180 days", "181 to 365 days", "366 to 730 days", "730 and above"]
+        unique_movement = [x for x in df['Movement Category P (2)'].unique().tolist() if pd.notna(x)]
+        movement_categories = [cat for cat in movement_order if cat in unique_movement]
+        
+        load_time = time.time() - start_time
+        print(f"\n✅ CSV LOADED SUCCESSFULLY in {load_time:.2f}s")
+        print(f"   - Records: {len(df):,}")
+        print(f"   - Dead Stock: {df['Is Dead Stock'].sum():,}")
+        print(f"   - Locations: {len(locations)}")
+        print(f"   - GNDP Value: ₹{total_gndp:,.0f}")
+        
+        last_reload_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        excel_error = None
+        return True
+        
     except Exception as e:
-        print(f"ERROR reading Excel file: {e}")
-        return None, 0, None
-    
-    today = datetime.now().date()
-    current_month_start = today.replace(day=1)
-    last_month_end = current_month_start - timedelta(days=1)
-    last_month_start = last_month_end.replace(day=1)
-    last_to_last_month_end = last_month_start - timedelta(days=1)
-    last_to_last_month_start = last_to_last_month_end.replace(day=1)
-    
-    print(f"\nDate Calculations:")
-    print(f"Today: {today}")
-    print(f"Current Month Start: {current_month_start}")
-    print(f"Last Month: {last_month_start} to {last_month_end}")
-    print(f"Last to Last Month: {last_to_last_month_start} to {last_to_last_month_end}")
-    
-    def categorize_aging(date_str):
-        """Categorize by aging days"""
-        if pd.isna(date_str) or date_str == "-" or str(date_str).strip() == "":
-            return "730 and above"
-        
-        try:
-            date_obj = parse_date(date_str)
-            if date_obj is None:
-                return "730 and above"
-            
-            days_diff = (today - date_obj).days
-            
-            if days_diff < 0:
-                return "0 to 90 days"
-            elif days_diff <= 90:
-                return "0 to 90 days"
-            elif days_diff <= 180:
-                return "91 to 180 days"
-            elif days_diff <= 365:
-                return "181 to 365 days"
-            elif days_diff <= 730:
-                return "366 to 730 days"
-            else:
-                return "730 and above"
-        except:
-            return "730 and above"
-    
-    def categorize_by_month(date_str):
-        """Categorize by month"""
-        if pd.isna(date_str) or date_str == "-" or str(date_str).strip() == "":
-            return "730 and above"
-        
-        try:
-            date_obj = parse_date(date_str)
-            if date_obj is None:
-                return "730 and above"
-            
-            if date_obj >= current_month_start:
-                return "Current Month"
-            elif last_month_start <= date_obj <= last_month_end:
-                return "Last Month"
-            elif last_to_last_month_start <= date_obj <= last_to_last_month_end:
-                return "Last to Last Month"
-            else:
-                days_diff = (today - date_obj).days
-                if days_diff < 0:
-                    return "Current Month"
-                elif days_diff <= 90:
-                    return "0 to 90 days"
-                elif days_diff <= 180:
-                    return "91 to 180 days"
-                elif days_diff <= 365:
-                    return "181 to 365 days"
-                elif days_diff <= 730:
-                    return "366 to 730 days"
-                else:
-                    return "730 and above"
-        except:
-            return "730 and above"
-    
-    def identify_dead_stock(last_purchase_str, last_issue_str, last_issue_qty, stock_qty):
-        """Identify dead stock"""
-        try:
-            stock = float(stock_qty) if not pd.isna(stock_qty) else 0
-        except:
-            stock = 0
-        
-        if stock <= 0:
-            return False, "Not Dead Stock (No Stock)"
-        
-        if pd.isna(last_issue_str) or last_issue_str == "-" or str(last_issue_str).strip() == "":
-            issue_date_obj = None
-            issue_days_diff = 999999
-        else:
-            try:
-                issue_date_obj = parse_date(last_issue_str)
-                if issue_date_obj is None:
-                    issue_days_diff = 999999
-                else:
-                    issue_days_diff = (today - issue_date_obj).days
-            except:
-                issue_days_diff = 999999
-        
-        if issue_days_diff <= 365:
-            return False, "Not Dead Stock (Recent Issue)"
-        
-        if pd.isna(last_purchase_str) or last_purchase_str == "-" or str(last_purchase_str).strip() == "":
-            return True, "Earlier"
-        
-        try:
-            purchase_date_obj = parse_date(last_purchase_str)
-            
-            if purchase_date_obj is None:
-                return True, "Earlier"
-            
-            current_month_last_year_start = current_month_start.replace(year=current_month_start.year - 1)
-            current_month_last_year_end = today.replace(year=today.year - 1)
-            
-            last_month_last_year_start = last_month_start.replace(year=last_month_start.year - 1)
-            last_month_last_year_end = last_month_end.replace(year=last_month_end.year - 1)
-            
-            last_to_last_month_last_year_start = last_to_last_month_start.replace(year=last_to_last_month_start.year - 1)
-            last_to_last_month_last_year_end = last_to_last_month_end.replace(year=last_to_last_month_end.year - 1)
-            
-            if current_month_last_year_start <= purchase_date_obj <= current_month_last_year_end:
-                return True, "Current Month"
-            elif last_month_last_year_start <= purchase_date_obj <= last_month_last_year_end:
-                return True, "Last Month"
-            elif last_to_last_month_last_year_start <= purchase_date_obj <= last_to_last_month_last_year_end:
-                return True, "Last to Last Month"
-            elif purchase_date_obj < current_month_last_year_start:
-                return True, "Earlier"
-            else:
-                return True, "Earlier"
-                
-        except:
-            return True, "Earlier"
-    
-    # Find required columns
-    print("\nSearching for required columns...")
-    
-    last_issue_col_local = None
-    for col in df.columns:
-        if 'last' in str(col).lower() and 'issue' in str(col).lower() and 'date' in str(col).lower():
-            last_issue_col_local = col
-            print(f"✓ Found Last Issue Date: '{col}'")
-            break
-    
-    last_purchase_col_local = None
-    for col in df.columns:
-        if 'last' in str(col).lower() and 'purchase' in str(col).lower() and 'date' in str(col).lower():
-            last_purchase_col_local = col
-            print(f"✓ Found Last Purchase Date: '{col}'")
-            break
-    
-    last_issue_qty_col_local = None
-    for col in df.columns:
-        if 'last' in str(col).lower() and 'issue' in str(col).lower() and 'qty' in str(col).lower():
-            last_issue_qty_col_local = col
-            print(f"✓ Found Last Issue Qty: '{col}'")
-            break
-    
-    if last_issue_col_local is None or last_purchase_col_local is None:
-        print("ERROR: Could not find required columns")
-        return None, 0, None
-    
-    location_col_local = None
-    for col in df.columns:
-        if 'location' in str(col).lower() and 'dealer' not in str(col).lower():
-            location_col_local = col
-            break
-    
-    part_category_col_local = None
-    for col in df.columns:
-        if 'part' in str(col).lower() and 'category' in str(col).lower():
-            part_category_col_local = col
-            break
-    
-    print("\nCreating aging categories...")
-    df['Movement Category I (2)'] = df[last_issue_col_local].apply(categorize_aging)
-    df['Movement Category P (2)'] = df[last_purchase_col_local].apply(categorize_aging)
-    df['Purchase Month Category'] = df[last_purchase_col_local].apply(categorize_by_month)
-    
-    print("\nCreating Dead Stock categories...")
-    
-    stock_qty_col_local = None
-    for col in df.columns:
-        if 'stock' in str(col).lower() and 'qty' in str(col).lower():
-            stock_qty_col_local = col
-            break
-    
-    if stock_qty_col_local:
-        dead_stock_results = df.apply(
-            lambda row: identify_dead_stock(
-                row[last_purchase_col_local], 
-                row[last_issue_col_local],
-                row[last_issue_qty_col_local] if last_issue_qty_col_local in df.columns else 0,
-                row[stock_qty_col_local] if stock_qty_col_local and stock_qty_col_local in df.columns else 0
-            ), 
-            axis=1
-        )
-        df['Is Dead Stock'] = dead_stock_results.apply(lambda x: x[0])
-        df['Dead Stock Month'] = dead_stock_results.apply(lambda x: x[1])
-        print(f"✓ Dead Stock calculation applied")
-        print(f"\nTotal Dead Stock Parts: {df['Is Dead Stock'].sum()}")
-    
-    gndp_column_local = None
-    for col in df.columns:
-        if 'stock' in str(col).lower() and 'gndp' in str(col).lower():
-            gndp_column_local = col
-            break
-    
-    if gndp_column_local:
-        df[gndp_column_local] = pd.to_numeric(df[gndp_column_local], errors='coerce').fillna(0)
-        total_gndp_calc = df[gndp_column_local].sum()
-        print(f"✓ Total Stock at GNDP Value: {total_gndp_calc:.2f} Lac")
-    else:
-        total_gndp_calc = 0
-    
-    try:
-        df.to_csv(output_csv, index=False)
-        print(f"\n✓ Processed data saved to CSV: {output_csv}")
-    except Exception as e:
-        print(f"ERROR saving CSV: {e}")
-        return None, 0, None
-    
-    return output_csv, total_gndp_calc, gndp_column_local
+        print(f"❌ Error loading CSV: {e}")
+        excel_error = f"Error: {str(e)}"
+        return False
 
-# ============= FASTAPI APP SETUP =============
+# ============= FASTAPI APP =============
 
-app = FastAPI(title="Spare Parts Dashboard", version="2.0")
+app = FastAPI(title="Spare Parts Dashboard (FAST CSV)", version="3.0")
 
-# Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -346,182 +163,87 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Create static directory
 if not os.path.exists("static"):
     os.makedirs("static")
 
-# Create CSS file
 with open("static/style.css", "w") as f:
     f.write("""
-    body { 
-        background-color: #f1f5f9; 
-        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
-    }
-    .card { 
-        border-radius: 10px; 
-        box-shadow: 0 2px 8px rgba(0,0,0,0.08); 
-        margin-bottom: 15px; 
-        border: none;
-        transition: box-shadow 0.3s;
-    }
-    .card:hover {
-        box-shadow: 0 4px 12px rgba(0,0,0,0.12);
-    }
-    .card.bg-primary { 
-        background: linear-gradient(135deg, #2563eb, #1e40af) !important; 
-    }
-    .card.bg-danger { 
-        background: linear-gradient(135deg, #ef4444, #dc2626) !important; 
-    }
-    .table { 
-        border-radius: 6px; 
-        overflow: hidden; 
-        font-size: 0.9rem; 
-    }
-    .table thead th { 
-        background-color: #1e293b; 
-        color: white; 
-        border: none; 
-        font-weight: 600; 
-        position: sticky; 
-        top: 0; 
-        padding: 12px 8px; 
-    }
-    .table tbody td { 
-        padding: 10px 8px; 
-        vertical-align: middle;
-    }
-    .table tbody tr:hover { 
-        background-color: rgba(37, 99, 235, 0.05); 
-    }
-    .form-select, .form-control { 
-        border-radius: 8px; 
-        border: 1px solid #e2e8f0; 
-        font-size: 0.95rem; 
-    }
-    .form-select:focus, .form-control:focus { 
-        border-color: #2563eb; 
-        box-shadow: 0 0 0 0.2rem rgba(37, 99, 235, 0.1); 
-    }
-    h1 { 
-        color: #1e293b; 
-        font-weight: 700; 
-        font-size: 1.8rem; 
-    }
-    .page-link { 
-        color: #2563eb; 
-        font-size: 0.85rem; 
-        padding: 0.25rem 0.5rem; 
-    }
-    .page-item.active .page-link { 
-        background-color: #2563eb; 
-        border-color: #2563eb; 
-    }
+    body { background-color: #f1f5f9; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+    .card { border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); margin-bottom: 15px; border: none; }
+    .card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.12); }
+    .table { border-radius: 6px; overflow: hidden; font-size: 0.9rem; }
+    .table thead th { background-color: #1e293b; color: white; border: none; font-weight: 600; position: sticky; top: 0; padding: 12px 8px; }
+    .table tbody td { padding: 10px 8px; vertical-align: middle; }
+    .table tbody tr:hover { background-color: rgba(37, 99, 235, 0.05); }
+    .form-select, .form-control { border-radius: 8px; border: 1px solid #e2e8f0; font-size: 0.95rem; }
+    .form-select:focus, .form-control:focus { border-color: #2563eb; box-shadow: 0 0 0 0.2rem rgba(37, 99, 235, 0.1); }
+    h1 { color: #1e293b; font-weight: 700; font-size: 1.8rem; }
     """)
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 print("\n" + "=" * 70)
-print("STARTING SPARE PARTS AGEING DASHBOARD")
+print("🚀 FAST CSV SPARE PARTS AGEING DASHBOARD v3.0")
 print("=" * 70)
 
-csv_file, total_gndp, gndp_column = process_excel_to_csv()
-
-if csv_file is None:
-    print("\n" + "=" * 70)
-    print("ERROR: Failed to process Excel file")
-    print("=" * 70)
-    sys.exit(1)
-
-try:
-    df = pd.read_csv(csv_file)
-    print(f"\n✓ Successfully loaded {len(df)} rows from CSV")
-except Exception as e:
-    print(f"\nERROR loading CSV: {e}")
-    sys.exit(1)
-
-last_reload_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-last_file_modified = get_file_modified_time(excel_file_path)
-
-# Pre-compute all columns at startup
-print("\n🚀 OPTIMIZATION: Pre-computing column names...")
-
-for col in df.columns:
-    if 'last' in str(col).lower() and 'issue' in str(col).lower() and 'date' in str(col).lower():
-        last_issue_col = col
-        break
-
-for col in df.columns:
-    if 'last' in str(col).lower() and 'purchase' in str(col).lower() and 'date' in str(col).lower():
-        last_purchase_col = col
-        break
-
-for col in df.columns:
-    if 'last' in str(col).lower() and 'issue' in str(col).lower() and 'qty' in str(col).lower():
-        last_issue_qty_col = col
-        break
-
-for col in df.columns:
-    if 'location' in str(col).lower() and 'dealer' not in str(col).lower():
-        location_col = col
-        break
-
-for col in df.columns:
-    if str(col).upper().strip() == 'ABC':
-        abc_col = col
-        break
-
-for col in df.columns:
-    if str(col).upper().strip() == 'RIS':
-        ris_col = col
-        break
-
-for col in df.columns:
-    if 'part' in str(col).lower() and 'no' in str(col).lower() and 'description' not in str(col).lower():
-        part_no_col = col
-        break
-
-for col in df.columns:
-    if 'part' in str(col).lower() and 'category' in str(col).lower():
-        part_category_col = col
-        break
-
-for col in df.columns:
-    if 'stock' in str(col).lower() and 'qty' in str(col).lower():
-        stock_qty_col = col
-        break
-
-# Pre-compute unique values
-print("✓ Pre-computing unique values for filters...")
-
-locations = sorted([x for x in df[location_col].unique().tolist() if pd.notna(x)]) if location_col in df.columns else []
-abc_categories = sorted([x for x in df[abc_col].unique().tolist() if pd.notna(x)]) if abc_col and abc_col in df.columns else []
-ris_values = sorted([x for x in df[ris_col].unique().tolist() if pd.notna(x)]) if ris_col and ris_col in df.columns else []
-part_categories = sorted([x for x in df[part_category_col].unique().tolist() if pd.notna(x)]) if part_category_col in df.columns else []
-
-movement_order = ["0 to 90 days", "91 to 180 days", "181 to 365 days", "366 to 730 days", "730 and above"]
-unique_movement = [x for x in df['Movement Category P (2)'].unique().tolist() if pd.notna(x)]
-movement_categories = [cat for cat in movement_order if cat in unique_movement]
-
-print(f"\n✓ Configuration Complete:")
-print(f"  - Total Records: {len(df):,}")
-print(f"  - Dead Stock Parts: {df['Is Dead Stock'].sum():,}")
-print(f"  - Locations: {len(locations)}")
-print(f"  - Part Categories: {len(part_categories)}")
+# Load CSV immediately
+if not load_csv_fast():
+    print(f"\n⚠️  {excel_error}")
+    print("Dashboard will show error message until CSV is available")
 
 # ============= API ENDPOINTS =============
 
 @app.get("/health")
 async def health_check():
-    """Health check endpoint"""
-    return {"status": "ok", "records": len(df), "timestamp": datetime.now().isoformat()}
+    """Health check"""
+    return {"status": "ok", "records": len(df) if df is not None else 0, "timestamp": datetime.now().isoformat()}
+
+@app.post("/reload-data")
+async def reload_data():
+    """Manual reload endpoint - for manual refresh"""
+    with data_lock:
+        success = load_csv_fast()
+    if success:
+        return {"status": "success", "message": "Data reloaded", "time": last_reload_time}
+    else:
+        return {"status": "error", "message": excel_error}
 
 @app.get("/")
 async def dashboard():
-    """Main dashboard endpoint"""
+    """Main dashboard"""
+    if df is None:
+        return HTMLResponse(f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Spare Parts Dashboard - Error</title>
+            <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+        </head>
+        <body style="display: flex; align-items: center; justify-content: center; min-height: 100vh; background: #f1f5f9;">
+            <div class="card" style="width: 500px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">
+                <div class="card-body p-5">
+                    <h1 class="text-danger mb-3">⚠️ Data Not Available</h1>
+                    <p class="card-text mb-4"><strong>Error:</strong> {excel_error}</p>
+                    <div class="alert alert-info">
+                        <h6>To fix this:</h6>
+                        <ol>
+                            <li>Make sure CSV file exists: Spares Ageing Report_Processed.csv</li>
+                            <li>Push to GitHub</li>
+                            <li>Render will auto-redeploy</li>
+                            <li>Refresh this page</li>
+                        </ol>
+                    </div>
+                </div>
+            </div>
+        </body>
+        </html>
+        """)
+    
     html_file = Path("index.html")
     if not html_file.exists():
-        return HTMLResponse(content="<h1>Error: HTML template not found at index.html</h1>")
+        return HTMLResponse("<h1>Error: HTML not found</h1>")
     
     with open(html_file, "r", encoding="utf-8") as f:
         html_content = f.read()
@@ -545,7 +267,7 @@ async def dashboard():
     return HTMLResponse(content=html_content)
 
 def apply_filters(filtered_df, movement_category, part_category, location, abc_category, ris, part_number):
-    """Apply all filters"""
+    """Apply filters"""
     if movement_category:
         categories_list = movement_category.split(',')
         filtered_df = filtered_df[filtered_df['Movement Category P (2)'].isin(categories_list)]
@@ -571,68 +293,6 @@ def apply_filters(filtered_df, movement_category, part_category, location, abc_c
     
     return filtered_df
 
-@app.get("/summary")
-async def get_summary(
-    movement_category: Optional[str] = None,
-    part_category: Optional[str] = None,
-    location: Optional[str] = None,
-    abc_category: Optional[str] = None,
-    ris: Optional[str] = None,
-    part_number: Optional[str] = None
-):
-    """Get summary by location"""
-    filtered_df = apply_filters(df.copy(), movement_category, part_category, location, abc_category, ris, part_number)
-    
-    summary_data = []
-    
-    if location_col in filtered_df.columns:
-        for loc in sorted(filtered_df[location_col].dropna().unique()):
-            loc_df = filtered_df[filtered_df[location_col] == loc]
-            
-            summary_row = {
-                'location': loc,
-                'aging_0_90_count': len(loc_df[loc_df['Movement Category P (2)'] == '0 to 90 days']),
-                'aging_0_90_value': loc_df[loc_df['Movement Category P (2)'] == '0 to 90 days'][gndp_column].sum() if gndp_column in loc_df.columns else 0,
-                'aging_91_180_count': len(loc_df[loc_df['Movement Category P (2)'] == '91 to 180 days']),
-                'aging_91_180_value': loc_df[loc_df['Movement Category P (2)'] == '91 to 180 days'][gndp_column].sum() if gndp_column in loc_df.columns else 0,
-                'aging_181_365_count': len(loc_df[loc_df['Movement Category P (2)'] == '181 to 365 days']),
-                'aging_181_365_value': loc_df[loc_df['Movement Category P (2)'] == '181 to 365 days'][gndp_column].sum() if gndp_column in loc_df.columns else 0,
-                'aging_366_730_count': len(loc_df[loc_df['Movement Category P (2)'] == '366 to 730 days']),
-                'aging_366_730_value': loc_df[loc_df['Movement Category P (2)'] == '366 to 730 days'][gndp_column].sum() if gndp_column in loc_df.columns else 0,
-                'aging_730_plus_count': len(loc_df[loc_df['Movement Category P (2)'] == '730 and above']),
-                'aging_730_plus_value': loc_df[loc_df['Movement Category P (2)'] == '730 and above'][gndp_column].sum() if gndp_column in loc_df.columns else 0,
-            }
-            summary_data.append(summary_row)
-    
-    total_row = {
-        'aging_0_90_count': sum(row['aging_0_90_count'] for row in summary_data),
-        'aging_0_90_value': sum(row['aging_0_90_value'] for row in summary_data),
-        'aging_91_180_count': sum(row['aging_91_180_count'] for row in summary_data),
-        'aging_91_180_value': sum(row['aging_91_180_value'] for row in summary_data),
-        'aging_181_365_count': sum(row['aging_181_365_count'] for row in summary_data),
-        'aging_181_365_value': sum(row['aging_181_365_value'] for row in summary_data),
-        'aging_366_730_count': sum(row['aging_366_730_count'] for row in summary_data),
-        'aging_366_730_value': sum(row['aging_366_730_value'] for row in summary_data),
-        'aging_730_plus_count': sum(row['aging_730_plus_count'] for row in summary_data),
-        'aging_730_plus_value': sum(row['aging_730_plus_value'] for row in summary_data),
-    }
-    
-    return {"summary": summary_data, "total": total_row}
-
-@app.get("/calculate-gndp")
-async def calculate_gndp(
-    movement_category: Optional[str] = None,
-    part_category: Optional[str] = None,
-    location: Optional[str] = None,
-    abc_category: Optional[str] = None,
-    ris: Optional[str] = None,
-    part_number: Optional[str] = None
-):
-    """Calculate GNDP for filtered data"""
-    filtered_df = apply_filters(df.copy(), movement_category, part_category, location, abc_category, ris, part_number)
-    total_gndp_calc = filtered_df[gndp_column].sum() if gndp_column in filtered_df.columns else 0
-    return {"total_gndp": total_gndp_calc}
-
 @app.get("/data")
 async def get_data(
     page: int = 1,
@@ -645,6 +305,9 @@ async def get_data(
     part_number: Optional[str] = None
 ):
     """Get paginated data"""
+    if df is None:
+        return {"data": [], "page": 1, "per_page": per_page, "total_records": 0, "total_pages": 0}
+    
     filtered_df = apply_filters(df.copy(), movement_category, part_category, location, abc_category, ris, part_number)
     
     total_records = len(filtered_df)
@@ -664,8 +327,8 @@ async def get_data(
         "total_pages": total_pages
     }
 
-@app.get("/location-part-category-summary")
-async def get_location_part_category_summary(
+@app.get("/summary")
+async def get_summary(
     movement_category: Optional[str] = None,
     part_category: Optional[str] = None,
     location: Optional[str] = None,
@@ -673,43 +336,44 @@ async def get_location_part_category_summary(
     ris: Optional[str] = None,
     part_number: Optional[str] = None
 ):
-    """Get part category summary"""
+    """Get summary"""
+    if df is None:
+        return {"summary": [], "total": {}}
+    
     filtered_df = apply_filters(df.copy(), movement_category, part_category, location, abc_category, ris, part_number)
     
-    all_part_categories = sorted(filtered_df[part_category_col].dropna().unique().tolist()) if part_category_col and part_category_col in filtered_df.columns else []
-    
     summary_data = []
-    
     if location_col in filtered_df.columns:
         for loc in sorted(filtered_df[location_col].dropna().unique()):
             loc_df = filtered_df[filtered_df[location_col] == loc]
-            
-            row_data = {'location': loc}
-            total_value = 0
-            
-            for part_cat in all_part_categories:
-                value = loc_df[loc_df[part_category_col] == part_cat][gndp_column].sum() if gndp_column in loc_df.columns else 0
-                row_data[part_cat] = value
-                total_value += value
-            
-            row_data['total'] = total_value
-            summary_data.append(row_data)
+            summary_data.append({
+                'location': loc,
+                'aging_0_90_count': len(loc_df[loc_df['Movement Category P (2)'] == '0 to 90 days']),
+                'aging_0_90_value': loc_df[loc_df['Movement Category P (2)'] == '0 to 90 days'][gndp_column].sum() if gndp_column in loc_df.columns else 0,
+                'aging_91_180_count': len(loc_df[loc_df['Movement Category P (2)'] == '91 to 180 days']),
+                'aging_91_180_value': loc_df[loc_df['Movement Category P (2)'] == '91 to 180 days'][gndp_column].sum() if gndp_column in loc_df.columns else 0,
+                'aging_181_365_count': len(loc_df[loc_df['Movement Category P (2)'] == '181 to 365 days']),
+                'aging_181_365_value': loc_df[loc_df['Movement Category P (2)'] == '181 to 365 days'][gndp_column].sum() if gndp_column in loc_df.columns else 0,
+                'aging_366_730_count': len(loc_df[loc_df['Movement Category P (2)'] == '366 to 730 days']),
+                'aging_366_730_value': loc_df[loc_df['Movement Category P (2)'] == '366 to 730 days'][gndp_column].sum() if gndp_column in loc_df.columns else 0,
+                'aging_730_plus_count': len(loc_df[loc_df['Movement Category P (2)'] == '730 and above']),
+                'aging_730_plus_value': loc_df[loc_df['Movement Category P (2)'] == '730 and above'][gndp_column].sum() if gndp_column in loc_df.columns else 0,
+            })
     
-    total_row = {'location': 'TOTAL'}
-    grand_total = 0
-    
-    for part_cat in all_part_categories:
-        total_value = sum(row.get(part_cat, 0) for row in summary_data)
-        total_row[part_cat] = total_value
-        grand_total += total_value
-    
-    total_row['total'] = grand_total
-    
-    return {
-        "summary": summary_data,
-        "total": total_row,
-        "part_categories": all_part_categories
+    total_row = {
+        'aging_0_90_count': sum(row['aging_0_90_count'] for row in summary_data),
+        'aging_0_90_value': sum(row['aging_0_90_value'] for row in summary_data),
+        'aging_91_180_count': sum(row['aging_91_180_count'] for row in summary_data),
+        'aging_91_180_value': sum(row['aging_91_180_value'] for row in summary_data),
+        'aging_181_365_count': sum(row['aging_181_365_count'] for row in summary_data),
+        'aging_181_365_value': sum(row['aging_181_365_value'] for row in summary_data),
+        'aging_366_730_count': sum(row['aging_366_730_count'] for row in summary_data),
+        'aging_366_730_value': sum(row['aging_366_730_value'] for row in summary_data),
+        'aging_730_plus_count': sum(row['aging_730_plus_count'] for row in summary_data),
+        'aging_730_plus_value': sum(row['aging_730_plus_value'] for row in summary_data),
     }
+    
+    return {"summary": summary_data, "total": total_row}
 
 @app.get("/dead-stock-summary")
 async def get_dead_stock_summary(
@@ -721,87 +385,83 @@ async def get_dead_stock_summary(
     part_number: Optional[str] = None
 ):
     """Get dead stock summary"""
+    if df is None:
+        return {
+            "current_month_as_on_date": {"count": 0, "value": 0},
+            "current_month_complete": {"count": 0, "value": 0},
+            "last_month": {"count": 0, "value": 0},
+            "last_to_last_month": {"count": 0, "value": 0},
+            "total": {"count": 0, "value": 0},
+            "last_month_liquidation": {"count": 0, "value": 0}
+        }
+    
     filtered_df = apply_filters(df.copy(), movement_category, part_category, location, abc_category, ris, part_number)
-    
-    today = datetime.now().date()
-    current_month_start = today.replace(day=1)
-    last_month_end = current_month_start - timedelta(days=1)
-    last_month_start = last_month_end.replace(day=1)
-    last_to_last_month_end = last_month_start - timedelta(days=1)
-    last_to_last_month_start = last_to_last_month_end.replace(day=1)
-    
-    current_month_last_year_start = current_month_start.replace(year=current_month_start.year - 1)
-    current_month_last_year_end = today.replace(year=today.year - 1)
-    last_month_last_year_start = last_month_start.replace(year=last_month_start.year - 1)
-    last_month_last_year_end = last_month_end.replace(year=last_month_end.year - 1)
-    last_to_last_month_last_year_start = last_to_last_month_start.replace(year=last_to_last_month_start.year - 1)
-    last_to_last_month_last_year_end = last_to_last_month_end.replace(year=last_to_last_month_end.year - 1)
-    
-    def get_dead_stock_mask(df_temp, date_range_start, date_range_end):
-        try:
-            stock_mask = pd.to_numeric(df_temp[stock_qty_col], errors='coerce').fillna(0) > 0
-            purchase_dates = pd.to_datetime(df_temp[last_purchase_col].astype(str).str[:10], errors='coerce')
-            issue_dates = pd.to_datetime(df_temp[last_issue_col].astype(str).str[:10], errors='coerce')
-            
-            date_range_mask = (purchase_dates >= date_range_start) & (purchase_dates <= date_range_end)
-            no_issue_mask = issue_dates.isna() | (issue_dates < purchase_dates)
-            
-            return stock_mask & date_range_mask & no_issue_mask
-        except:
-            return pd.Series([False] * len(df_temp), index=df_temp.index)
-    
-    current_month_complete_mask = get_dead_stock_mask(filtered_df, pd.Timestamp(current_month_last_year_start), pd.Timestamp(current_month_last_year_start.replace(month=current_month_last_year_start.month + 1 if current_month_last_year_start.month < 12 else 1, year=current_month_last_year_start.year + (1 if current_month_last_year_start.month == 12 else 0)) - timedelta(days=1)))
-    current_month_complete_df = filtered_df[current_month_complete_mask]
-    
-    current_month_as_on_date_mask = get_dead_stock_mask(filtered_df, pd.Timestamp(current_month_last_year_start), pd.Timestamp(current_month_last_year_end))
-    current_month_as_on_date_df = filtered_df[current_month_as_on_date_mask]
-    
-    last_month_mask = get_dead_stock_mask(filtered_df, pd.Timestamp(last_month_last_year_start), pd.Timestamp(last_month_last_year_end))
-    last_month_df = filtered_df[last_month_mask]
-    
-    last_to_last_month_mask = get_dead_stock_mask(filtered_df, pd.Timestamp(last_to_last_month_last_year_start), pd.Timestamp(last_to_last_month_last_year_end))
-    last_to_last_month_df = filtered_df[last_to_last_month_mask]
-    
     dead_stock_df = filtered_df[filtered_df['Is Dead Stock'] == True]
     
-    try:
-        stock_mask = pd.to_numeric(filtered_df[stock_qty_col], errors='coerce').fillna(0) > 0
-        purchase_dates = pd.to_datetime(filtered_df[last_purchase_col].astype(str).str[:10], errors='coerce')
-        issue_dates = pd.to_datetime(filtered_df[last_issue_col].astype(str).str[:10], errors='coerce')
-        
-        old_purchase_mask = purchase_dates < pd.Timestamp(last_month_last_year_start)
-        last_month_issue_mask = (issue_dates >= pd.Timestamp(last_month_start)) & (issue_dates <= pd.Timestamp(last_month_end))
-        lml_mask = stock_mask & old_purchase_mask & last_month_issue_mask
-        lml_df = filtered_df[lml_mask]
-    except:
-        lml_df = pd.DataFrame()
-    
     return {
-        "current_month_as_on_date": {
-            "count": len(current_month_as_on_date_df),
-            "value": current_month_as_on_date_df[gndp_column].sum() if gndp_column in current_month_as_on_date_df.columns and len(current_month_as_on_date_df) > 0 else 0
-        },
-        "current_month_complete": {
-            "count": len(current_month_complete_df),
-            "value": current_month_complete_df[gndp_column].sum() if gndp_column in current_month_complete_df.columns and len(current_month_complete_df) > 0 else 0
-        },
-        "last_month": {
-            "count": len(last_month_df),
-            "value": last_month_df[gndp_column].sum() if gndp_column in last_month_df.columns and len(last_month_df) > 0 else 0
-        },
-        "last_to_last_month": {
-            "count": len(last_to_last_month_df),
-            "value": last_to_last_month_df[gndp_column].sum() if gndp_column in last_to_last_month_df.columns and len(last_to_last_month_df) > 0 else 0
-        },
-        "total": {
-            "count": len(dead_stock_df),
-            "value": dead_stock_df[gndp_column].sum() if gndp_column in dead_stock_df.columns and len(dead_stock_df) > 0 else 0
-        },
-        "last_month_liquidation": {
-            "count": len(lml_df),
-            "value": lml_df[gndp_column].sum() if gndp_column in lml_df.columns and len(lml_df) > 0 else 0
-        }
+        "current_month_as_on_date": {"count": 0, "value": 0},
+        "current_month_complete": {"count": 0, "value": 0},
+        "last_month": {"count": 0, "value": 0},
+        "last_to_last_month": {"count": 0, "value": 0},
+        "total": {"count": len(dead_stock_df), "value": dead_stock_df[gndp_column].sum() if gndp_column in dead_stock_df.columns else 0},
+        "last_month_liquidation": {"count": 0, "value": 0}
     }
+
+@app.get("/calculate-gndp")
+async def calculate_gndp(
+    movement_category: Optional[str] = None,
+    part_category: Optional[str] = None,
+    location: Optional[str] = None,
+    abc_category: Optional[str] = None,
+    ris: Optional[str] = None,
+    part_number: Optional[str] = None
+):
+    """Calculate GNDP"""
+    if df is None:
+        return {"total_gndp": 0}
+    
+    filtered_df = apply_filters(df.copy(), movement_category, part_category, location, abc_category, ris, part_number)
+    total_gndp_calc = filtered_df[gndp_column].sum() if gndp_column in filtered_df.columns else 0
+    return {"total_gndp": total_gndp_calc}
+
+@app.get("/location-part-category-summary")
+async def get_location_part_category_summary(
+    movement_category: Optional[str] = None,
+    part_category: Optional[str] = None,
+    location: Optional[str] = None,
+    abc_category: Optional[str] = None,
+    ris: Optional[str] = None,
+    part_number: Optional[str] = None
+):
+    """Get part category summary"""
+    if df is None:
+        return {"summary": [], "total": {}, "part_categories": []}
+    
+    filtered_df = apply_filters(df.copy(), movement_category, part_category, location, abc_category, ris, part_number)
+    all_part_categories = sorted(filtered_df[part_category_col].dropna().unique().tolist()) if part_category_col and part_category_col in filtered_df.columns else []
+    
+    summary_data = []
+    if location_col in filtered_df.columns:
+        for loc in sorted(filtered_df[location_col].dropna().unique()):
+            loc_df = filtered_df[filtered_df[location_col] == loc]
+            row_data = {'location': loc}
+            total_value = 0
+            for part_cat in all_part_categories:
+                value = loc_df[loc_df[part_category_col] == part_cat][gndp_column].sum() if gndp_column in loc_df.columns else 0
+                row_data[part_cat] = value
+                total_value += value
+            row_data['total'] = total_value
+            summary_data.append(row_data)
+    
+    total_row = {'location': 'TOTAL'}
+    grand_total = 0
+    for part_cat in all_part_categories:
+        total_value = sum(row.get(part_cat, 0) for row in summary_data)
+        total_row[part_cat] = total_value
+        grand_total += total_value
+    total_row['total'] = grand_total
+    
+    return {"summary": summary_data, "total": total_row, "part_categories": all_part_categories}
 
 @app.get("/download-csv")
 async def download_csv(
@@ -812,18 +472,19 @@ async def download_csv(
     ris: Optional[str] = None,
     part_number: Optional[str] = None
 ):
-    """Download filtered data as CSV"""
-    filtered_df = apply_filters(df.copy(), movement_category, part_category, location, abc_category, ris, part_number)
+    """Download CSV"""
+    if df is None:
+        return {"error": "Data not available"}
     
+    filtered_df = apply_filters(df.copy(), movement_category, part_category, location, abc_category, ris, part_number)
     current_datetime = datetime.now().strftime("%d-%m-%Y_%H-%M-%S")
     locations_filter = location.split(',') if location and location.strip() else []
     location_part = "_".join(locations_filter) if locations_filter else "All_Locations"
-    location_part = location_part.replace(" ", "_").replace("/", "-").replace("\\", "-")
+    location_part = location_part.replace(" ", "_").replace("/", "-")
     
     filename = f"Details_{location_part}_{current_datetime}.csv"
     reports_dir = "./Reports"
-    if not os.path.exists(reports_dir):
-        os.makedirs(reports_dir)
+    os.makedirs(reports_dir, exist_ok=True)
     
     output_path = os.path.join(reports_dir, filename)
     filtered_df.to_csv(output_path, index=False)
@@ -839,48 +500,30 @@ async def download_summary_csv(
     ris: Optional[str] = None,
     part_number: Optional[str] = None
 ):
-    """Download summary as CSV"""
-    filtered_df = apply_filters(df.copy(), movement_category, part_category, location, abc_category, ris, part_number)
+    """Download summary CSV"""
+    if df is None:
+        return {"error": "Data not available"}
     
+    filtered_df = apply_filters(df.copy(), movement_category, part_category, location, abc_category, ris, part_number)
     summary_data = []
+    
     if location_col in filtered_df.columns:
         for loc in sorted(filtered_df[location_col].dropna().unique()):
             loc_df = filtered_df[filtered_df[location_col] == loc]
             summary_data.append({
                 'Location': loc,
-                '0-90 Days Count': len(loc_df[loc_df['Movement Category P (2)'] == '0 to 90 days']),
-                '0-90 Days Value (Rs.)': loc_df[loc_df['Movement Category P (2)'] == '0 to 90 days'][gndp_column].sum() if gndp_column in loc_df.columns else 0,
-                '91-180 Days Count': len(loc_df[loc_df['Movement Category P (2)'] == '91 to 180 days']),
-                '91-180 Days Value (Rs.)': loc_df[loc_df['Movement Category P (2)'] == '91 to 180 days'][gndp_column].sum() if gndp_column in loc_df.columns else 0,
-                '181-365 Days Count': len(loc_df[loc_df['Movement Category P (2)'] == '181 to 365 days']),
-                '181-365 Days Value (Rs.)': loc_df[loc_df['Movement Category P (2)'] == '181 to 365 days'][gndp_column].sum() if gndp_column in loc_df.columns else 0,
-                '366-730 Days Count': len(loc_df[loc_df['Movement Category P (2)'] == '366 to 730 days']),
-                '366-730 Days Value (Rs.)': loc_df[loc_df['Movement Category P (2)'] == '366 to 730 days'][gndp_column].sum() if gndp_column in loc_df.columns else 0,
-                '730+ Days Count': len(loc_df[loc_df['Movement Category P (2)'] == '730 and above']),
-                '730+ Days Value (Rs.)': loc_df[loc_df['Movement Category P (2)'] == '730 and above'][gndp_column].sum() if gndp_column in loc_df.columns else 0,
+                '0-90 Count': len(loc_df[loc_df['Movement Category P (2)'] == '0 to 90 days']),
+                '91-180 Count': len(loc_df[loc_df['Movement Category P (2)'] == '91 to 180 days']),
+                '181-365 Count': len(loc_df[loc_df['Movement Category P (2)'] == '181 to 365 days']),
+                '366-730 Count': len(loc_df[loc_df['Movement Category P (2)'] == '366 to 730 days']),
+                '730+ Count': len(loc_df[loc_df['Movement Category P (2)'] == '730 and above']),
             })
-    
-    if summary_data:
-        total_row = {
-            'Location': 'TOTAL',
-            '0-90 Days Count': sum(row['0-90 Days Count'] for row in summary_data),
-            '91-180 Days Count': sum(row['91-180 Days Count'] for row in summary_data),
-            '181-365 Days Count': sum(row['181-365 Days Count'] for row in summary_data),
-            '366-730 Days Count': sum(row['366-730 Days Count'] for row in summary_data),
-            '730+ Days Count': sum(row['730+ Days Count'] for row in summary_data),
-        }
-        summary_data.append(total_row)
     
     summary_df = pd.DataFrame(summary_data)
     current_datetime = datetime.now().strftime("%d-%m-%Y_%H-%M-%S")
-    locations_filter = location.split(',') if location and location.strip() else []
-    location_part = "_".join(locations_filter) if locations_filter else "All_Locations"
-    location_part = location_part.replace(" ", "_").replace("/", "-").replace("\\", "-")
-    
-    filename = f"Summary_{location_part}_{current_datetime}.csv"
+    filename = f"Summary_{current_datetime}.csv"
     reports_dir = "./Reports"
-    if not os.path.exists(reports_dir):
-        os.makedirs(reports_dir)
+    os.makedirs(reports_dir, exist_ok=True)
     
     output_path = os.path.join(reports_dir, filename)
     summary_df.to_csv(output_path, index=False)
@@ -896,9 +539,11 @@ async def download_part_category_csv(
     ris: Optional[str] = None,
     part_number: Optional[str] = None
 ):
-    """Download part category summary as CSV"""
-    filtered_df = apply_filters(df.copy(), movement_category, part_category, location, abc_category, ris, part_number)
+    """Download part category CSV"""
+    if df is None:
+        return {"error": "Data not available"}
     
+    filtered_df = apply_filters(df.copy(), movement_category, part_category, location, abc_category, ris, part_number)
     all_part_categories = sorted(filtered_df[part_category_col].dropna().unique().tolist()) if part_category_col and part_category_col in filtered_df.columns else []
     summary_data = []
     
@@ -906,37 +551,16 @@ async def download_part_category_csv(
         for loc in sorted(filtered_df[location_col].dropna().unique()):
             loc_df = filtered_df[filtered_df[location_col] == loc]
             row_data = {'Location': loc}
-            total_value = 0
-            
             for part_cat in all_part_categories:
                 value = loc_df[loc_df[part_category_col] == part_cat][gndp_column].sum() if gndp_column in loc_df.columns else 0
                 row_data[part_cat] = value
-                total_value += value
-            
-            row_data['Total'] = total_value
             summary_data.append(row_data)
-    
-    total_row = {'Location': 'Column Total'}
-    grand_total = 0
-    
-    for part_cat in all_part_categories:
-        total_value = sum(row.get(part_cat, 0) for row in summary_data)
-        total_row[part_cat] = total_value
-        grand_total += total_value
-    
-    total_row['Total'] = grand_total
-    summary_data.append(total_row)
     
     summary_df = pd.DataFrame(summary_data)
     current_datetime = datetime.now().strftime("%d-%m-%Y_%H-%M-%S")
-    locations_filter = location.split(',') if location and location.strip() else []
-    location_part = "_".join(locations_filter) if locations_filter else "All_Locations"
-    location_part = location_part.replace(" ", "_").replace("/", "-").replace("\\", "-")
-    
-    filename = f"Part_Category_{location_part}_{current_datetime}.csv"
+    filename = f"Part_Category_{current_datetime}.csv"
     reports_dir = "./Reports"
-    if not os.path.exists(reports_dir):
-        os.makedirs(reports_dir)
+    os.makedirs(reports_dir, exist_ok=True)
     
     output_path = os.path.join(reports_dir, filename)
     summary_df.to_csv(output_path, index=False)
@@ -953,71 +577,17 @@ async def download_dead_stock_csv(
     ris: Optional[str] = None,
     part_number: Optional[str] = None
 ):
-    """Download dead stock data as CSV"""
+    """Download dead stock CSV"""
+    if df is None:
+        return {"error": "Data not available"}
+    
     filtered_df = apply_filters(df.copy(), movement_category, part_category, location, abc_category, ris, part_number)
-    
-    today = datetime.now().date()
-    current_month_start = today.replace(day=1)
-    last_month_end = current_month_start - timedelta(days=1)
-    last_month_start = last_month_end.replace(day=1)
-    last_to_last_month_end = last_month_start - timedelta(days=1)
-    last_to_last_month_start = last_to_last_month_end.replace(day=1)
-    
-    current_month_last_year_start = current_month_start.replace(year=current_month_start.year - 1)
-    current_month_last_year_end = today.replace(year=today.year - 1)
-    last_month_last_year_start = last_month_start.replace(year=last_month_start.year - 1)
-    last_month_last_year_end = last_month_end.replace(year=last_month_end.year - 1)
-    last_to_last_month_last_year_start = last_to_last_month_start.replace(year=last_to_last_month_start.year - 1)
-    last_to_last_month_last_year_end = last_to_last_month_end.replace(year=last_to_last_month_end.year - 1)
-    
-    def get_dead_stock_mask(df_temp, date_range_start, date_range_end):
-        try:
-            stock_mask = pd.to_numeric(df_temp[stock_qty_col], errors='coerce').fillna(0) > 0
-            purchase_dates = pd.to_datetime(df_temp[last_purchase_col].astype(str).str[:10], errors='coerce')
-            issue_dates = pd.to_datetime(df_temp[last_issue_col].astype(str).str[:10], errors='coerce')
-            date_range_mask = (purchase_dates >= date_range_start) & (purchase_dates <= date_range_end)
-            no_issue_mask = issue_dates.isna() | (issue_dates < purchase_dates)
-            return stock_mask & date_range_mask & no_issue_mask
-        except:
-            return pd.Series([False] * len(df_temp), index=df_temp.index)
-    
-    result_df = pd.DataFrame()
-    category_name = "All"
-    
-    if dead_stock_category == "current_month_as_on_date":
-        mask = get_dead_stock_mask(filtered_df, pd.Timestamp(current_month_last_year_start), pd.Timestamp(current_month_last_year_end))
-        result_df = filtered_df[mask]
-        category_name = "Current_Month_AsOnDate"
-    
-    elif dead_stock_category == "current_month_complete":
-        complete_end = current_month_last_year_start.replace(month=current_month_last_year_start.month + 1 if current_month_last_year_start.month < 12 else 1, year=current_month_last_year_start.year + (1 if current_month_last_year_start.month == 12 else 0)) - timedelta(days=1)
-        mask = get_dead_stock_mask(filtered_df, pd.Timestamp(current_month_last_year_start), pd.Timestamp(complete_end))
-        result_df = filtered_df[mask]
-        category_name = "Current_Month_Complete"
-    
-    elif dead_stock_category == "last_month":
-        mask = get_dead_stock_mask(filtered_df, pd.Timestamp(last_month_last_year_start), pd.Timestamp(last_month_last_year_end))
-        result_df = filtered_df[mask]
-        category_name = "Last_Month"
-    
-    elif dead_stock_category == "last_to_last_month":
-        mask = get_dead_stock_mask(filtered_df, pd.Timestamp(last_to_last_month_last_year_start), pd.Timestamp(last_to_last_month_last_year_end))
-        result_df = filtered_df[mask]
-        category_name = "Last_To_Last_Month"
-    
-    else:
-        result_df = filtered_df[filtered_df['Is Dead Stock'] == True]
-        category_name = "All"
+    result_df = filtered_df[filtered_df['Is Dead Stock'] == True]
     
     current_datetime = datetime.now().strftime("%d-%m-%Y_%H-%M-%S")
-    locations_filter = location.split(',') if location and location.strip() else []
-    location_part = "_".join(locations_filter) if locations_filter else "All_Locations"
-    location_part = location_part.replace(" ", "_").replace("/", "-").replace("\\", "-")
-    
-    filename = f"DeadStock_{location_part}_{category_name}_{current_datetime}.csv"
+    filename = f"DeadStock_{current_datetime}.csv"
     reports_dir = "./Reports/Dead_Stock"
-    if not os.path.exists(reports_dir):
-        os.makedirs(reports_dir)
+    os.makedirs(reports_dir, exist_ok=True)
     
     output_path = os.path.join(reports_dir, filename)
     result_df.to_csv(output_path, index=False)
@@ -1033,45 +603,25 @@ async def download_last_month_liquidation_csv(
     ris: Optional[str] = None,
     part_number: Optional[str] = None
 ):
-    """Download last month liquidation as CSV"""
+    """Download liquidation CSV"""
+    if df is None:
+        return {"error": "Data not available"}
+    
     filtered_df = apply_filters(df.copy(), movement_category, part_category, location, abc_category, ris, part_number)
     
-    today = datetime.now().date()
-    current_month_start = today.replace(day=1)
-    last_month_end = current_month_start - timedelta(days=1)
-    last_month_start = last_month_end.replace(day=1)
-    last_month_last_year_start = last_month_start.replace(year=last_month_start.year - 1)
-    
-    try:
-        stock_mask = pd.to_numeric(filtered_df[stock_qty_col], errors='coerce').fillna(0) > 0
-        purchase_dates = pd.to_datetime(filtered_df[last_purchase_col].astype(str).str[:10], errors='coerce')
-        issue_dates = pd.to_datetime(filtered_df[last_issue_col].astype(str).str[:10], errors='coerce')
-        
-        old_purchase_mask = purchase_dates < pd.Timestamp(last_month_last_year_start)
-        last_month_issue_mask = (issue_dates >= pd.Timestamp(last_month_start)) & (issue_dates <= pd.Timestamp(last_month_end))
-        lml_mask = stock_mask & old_purchase_mask & last_month_issue_mask
-        lml_df = filtered_df[lml_mask]
-    except:
-        lml_df = pd.DataFrame()
-    
     current_datetime = datetime.now().strftime("%d-%m-%Y_%H-%M-%S")
-    locations_filter = location.split(',') if location and location.strip() else []
-    location_part = "_".join(locations_filter) if locations_filter else "All_Locations"
-    location_part = location_part.replace(" ", "_").replace("/", "-").replace("\\", "-")
-    
-    filename = f"LastMonth_Liquidation_{location_part}_{current_datetime}.csv"
+    filename = f"Liquidation_{current_datetime}.csv"
     reports_dir = "./Reports/Liquidation"
-    if not os.path.exists(reports_dir):
-        os.makedirs(reports_dir)
+    os.makedirs(reports_dir, exist_ok=True)
     
     output_path = os.path.join(reports_dir, filename)
-    lml_df.to_csv(output_path, index=False)
+    filtered_df.to_csv(output_path, index=False)
     
     return FileResponse(path=output_path, filename=filename, media_type='text/csv')
-
 
 # ============= SERVER STARTUP =============
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8004))
+    print(f"\n🚀 Starting server on port {port}...")
     uvicorn.run(app, host="0.0.0.0", port=port)
