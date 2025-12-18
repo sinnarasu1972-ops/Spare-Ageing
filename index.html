@@ -2,13 +2,19 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Unnati Motors - Spare Parts Ageing Dashboard</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+    <meta name="theme-color" content="#2563eb">
+    <meta name="description" content="Unnati Motors Spare Parts Ageing Dashboard">
+    <title>Unnati Motors - Spare Parts Dashboard</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-select@1.14.0-beta2/dist/css/bootstrap-select.min.css">
     <link rel="stylesheet" href="/static/style.css">
     <style>
+        * {
+            box-sizing: border-box;
+        }
+
         :root {
             --primary: #2563eb;
             --secondary: #64748b;
@@ -19,39 +25,74 @@
             --light: #f1f5f9;
         }
         
+        body {
+            background-color: #f1f5f9;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+
         .header-section {
             background: linear-gradient(135deg, var(--primary) 0%, #1e40af 100%);
-            color: white;
-            padding: 25px;
+            color: #ffffff !important;
+            padding: 20px 15px;
             border-radius: 12px;
             box-shadow: 0 4px 15px rgba(37, 99, 235, 0.2);
             margin-bottom: 20px;
+            text-align: center;
         }
         
         .header-section h1 {
-            font-size: 1.8rem;
+            font-size: clamp(1.3rem, 5vw, 1.8rem);
             margin: 0;
             font-weight: 700;
+            color: white !important;
+            word-wrap: break-word;
         }
         
         .header-section .subtitle {
-            font-size: 0.9rem;
-            opacity: 0.9;
+            font-size: clamp(0.8rem, 3vw, 0.9rem);
+            opacity: 0.95;
+            margin-top: 5px;
+            color: white !important;
+        }
+
+        .header-section small {
+            color: rgba(255, 255, 255, 0.9) !important;
+            font-size: clamp(0.7rem, 2.5vw, 0.75rem);
+            display: block;
             margin-top: 5px;
         }
         
         .dead-stock-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-            gap: 15px;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        @media (max-width: 480px) {
+            .dead-stock-grid {
+                grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+                gap: 8px;
+            }
         }
         
         .dead-stock-card {
             background: white;
-            padding: 18px;
+            padding: 12px;
             border-radius: 10px;
             border-left: 5px solid var(--primary);
             box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        @media (max-width: 480px) {
+            .dead-stock-card {
+                padding: 10px;
+            }
         }
         
         .dead-stock-card.current { border-left-color: #ef4444; }
@@ -61,125 +102,266 @@
         .dead-stock-card.liquidation { border-left-color: #f97316; }
         
         .dead-stock-card h6 {
-            font-size: 0.85rem;
+            font-size: clamp(0.7rem, 2vw, 0.85rem);
             color: var(--secondary);
-            margin-bottom: 8px;
+            margin-bottom: 6px;
             font-weight: 600;
+            line-height: 1.2;
         }
         
         .dead-stock-card .count {
-            font-size: 2rem;
+            font-size: clamp(1.5rem, 5vw, 2rem);
             font-weight: 700;
             color: var(--dark);
-            margin-bottom: 5px;
+            margin-bottom: 3px;
+            line-height: 1.1;
         }
         
         .dead-stock-card .value {
-            font-size: 0.85rem;
+            font-size: clamp(0.65rem, 2vw, 0.85rem);
             color: var(--secondary);
+            margin-bottom: 8px;
+        }
+
+        .dead-stock-card .btn {
+            font-size: clamp(0.7rem, 2vw, 0.85rem);
+            padding: clamp(4px, 2vw, 6px) clamp(6px, 3vw, 8px);
+            margin-top: 6px;
         }
         
         .filter-card {
             background: white;
-            padding: 15px;
+            padding: clamp(12px, 3vw, 15px);
+            border-radius: 10px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            margin-bottom: 15px;
+        }
+
+        .filter-card label {
+            font-weight: 600;
+            font-size: clamp(0.8rem, 2.5vw, 0.9rem);
+            margin-bottom: 6px;
+        }
+
+        .form-select, .form-control {
+            font-size: clamp(0.8rem, 2.5vw, 0.95rem);
+            border-radius: 8px;
+        }
+
+        .card {
+            margin-bottom: 15px;
             border-radius: 10px;
             box-shadow: 0 2px 8px rgba(0,0,0,0.08);
         }
-        
+
+        .card-body {
+            padding: clamp(12px, 3vw, 20px);
+        }
+
+        .table {
+            font-size: clamp(0.7rem, 2vw, 0.9rem);
+            margin-bottom: 0;
+        }
+
+        .table th {
+            background-color: #1e293b;
+            color: white;
+            font-weight: 600;
+            padding: clamp(8px, 2vw, 12px);
+            font-size: clamp(0.65rem, 1.8vw, 0.85rem);
+            white-space: nowrap;
+            vertical-align: middle;
+        }
+
+        .table td {
+            padding: clamp(8px, 2vw, 10px);
+            vertical-align: middle;
+        }
+
+        .btn-sm {
+            font-size: clamp(0.7rem, 2vw, 0.875rem);
+            padding: clamp(4px, 1.5vw, 6px) clamp(6px, 2vw, 12px);
+        }
+
+        h5 {
+            font-size: clamp(1rem, 3vw, 1.25rem);
+        }
+
+        h6 {
+            font-size: clamp(0.85rem, 2.5vw, 1rem);
+        }
+
+        /* Mobile adjustments */
+        @media (max-width: 576px) {
+            .container-fluid {
+                padding: 10px !important;
+            }
+
+            .header-section {
+                padding: 15px 10px;
+                margin-bottom: 15px;
+            }
+
+            .row {
+                --bs-gutter-x: 0.75rem;
+            }
+
+            .col-lg-3, .col-md-6 {
+                margin-bottom: 10px;
+            }
+
+            .table-responsive {
+                font-size: 0.75rem;
+            }
+
+            .page-link {
+                padding: 4px 8px;
+                font-size: 0.75rem;
+            }
+
+            .dead-stock-card h6 {
+                line-height: 1.3;
+            }
+        }
+
         @media (max-width: 768px) {
             .dead-stock-grid {
-                grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+                grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            }
+        }
+
+        /* Prevent text selection issues on mobile */
+        input, select, textarea {
+            -webkit-user-select: text;
+            -moz-user-select: text;
+            user-select: text;
+        }
+
+        /* Better touch targets on mobile */
+        @media (max-width: 768px) {
+            .btn {
+                min-height: 44px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+
+            .form-select, .form-control {
+                min-height: 44px;
+                padding: 8px 12px;
+            }
+        }
+
+        /* Pagination responsive */
+        .pagination {
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 4px;
+        }
+
+        .page-item {
+            margin: 2px;
+        }
+
+        /* Cards responsive */
+        @media (max-width: 480px) {
+            .card {
+                border-radius: 8px;
+            }
+
+            .card-body {
+                padding: 10px;
             }
         }
     </style>
 </head>
 <body>
-    <div class="container-fluid p-4">
+    <div class="container-fluid p-3 p-md-4">
         <!-- HEADER -->
         <div class="header-section">
             <h1>📊 Unnati Motors Mahindra</h1>
             <p class="subtitle">Spare Parts Ageing Dashboard</p>
-            <small style="opacity: 0.8; margin-top: 5px; display: block;">Last Updated: {last_reload_time}</small>
+            <small style="opacity: 0.9;">Last Updated: {last_reload_time}</small>
         </div>
         
         <!-- DEAD STOCK SECTION -->
-        <div class="card bg-danger text-white mb-4">
+        <div class="card bg-danger text-white">
             <div class="card-body">
-                <h4 style="margin: 0 0 20px 0; font-weight: 700;">😰 Dead Stock Monitor</h4>
+                <h4 style="margin-bottom: 15px; font-weight: 700; color: white;">😰 Dead Stock Monitor</h4>
                 <div class="dead-stock-grid">
                     <div class="dead-stock-card current">
                         <h6>Current Month (As on Date)</h6>
                         <div class="count" id="deadStockCurrentAsOnCount">0</div>
-                        <div class="value">Value: <span id="deadStockCurrentAsOnValue">₹0</span></div>
-                        <button class="btn btn-danger btn-sm w-100 mt-2" id="btnDeadStockCurrent">Export</button>
+                        <div class="value">₹<span id="deadStockCurrentAsOnValue">0</span></div>
+                        <button class="btn btn-danger btn-sm w-100" id="btnDeadStockCurrent">Export</button>
                     </div>
                     <div class="dead-stock-card current">
                         <h6>Current Month (Complete)</h6>
                         <div class="count" id="deadStockCurrentCompleteCount">0</div>
-                        <div class="value">Value: <span id="deadStockCurrentCompleteValue">₹0</span></div>
-                        <button class="btn btn-danger btn-sm w-100 mt-2" id="btnDeadStockCurrentComplete">Export</button>
+                        <div class="value">₹<span id="deadStockCurrentCompleteValue">0</span></div>
+                        <button class="btn btn-danger btn-sm w-100" id="btnDeadStockCurrentComplete">Export</button>
                     </div>
                     <div class="dead-stock-card last">
                         <h6>Last Month Dead Stock</h6>
                         <div class="count" id="deadStockLastCount">0</div>
-                        <div class="value">Value: <span id="deadStockLastValue">₹0</span></div>
-                        <button class="btn btn-sm w-100 mt-2" id="btnDeadStockLast" style="background-color: #8b5cf6; color: white;">Export</button>
+                        <div class="value">₹<span id="deadStockLastValue">0</span></div>
+                        <button class="btn btn-sm w-100" id="btnDeadStockLast" style="background-color: #8b5cf6; color: white;">Export</button>
                     </div>
                     <div class="dead-stock-card last-to-last">
                         <h6>Last to Last Month</h6>
                         <div class="count" id="deadStockLastToLastCount">0</div>
-                        <div class="value">Value: <span id="deadStockLastToLastValue">₹0</span></div>
-                        <button class="btn btn-sm w-100 mt-2" id="btnDeadStockLastToLast" style="background-color: #10b981; color: white;">Export</button>
+                        <div class="value">₹<span id="deadStockLastToLastValue">0</span></div>
+                        <button class="btn btn-sm w-100" id="btnDeadStockLastToLast" style="background-color: #10b981; color: white;">Export</button>
                     </div>
                     <div class="dead-stock-card total">
                         <h6>Total Dead Stock</h6>
                         <div class="count" id="deadStockTotalCount">0</div>
-                        <div class="value">Value: <span id="deadStockTotalValue">₹0</span></div>
-                        <button class="btn btn-warning btn-sm w-100 mt-2" id="btnDeadStockAll">Export</button>
+                        <div class="value">₹<span id="deadStockTotalValue">0</span></div>
+                        <button class="btn btn-warning btn-sm w-100" id="btnDeadStockAll">Export</button>
                     </div>
                     <div class="dead-stock-card liquidation">
                         <h6>🟠 Last Month Liquidation</h6>
                         <div class="count" id="lastMonthLiquidationCount">0</div>
-                        <div class="value">Value: <span id="lastMonthLiquidationValue">₹0</span></div>
-                        <button class="btn btn-sm w-100 mt-2" id="btnLastMonthLiquidation" style="background-color: #f97316; color: white;">Export</button>
+                        <div class="value">₹<span id="lastMonthLiquidationValue">0</span></div>
+                        <button class="btn btn-sm w-100" id="btnLastMonthLiquidation" style="background-color: #f97316; color: white;">Export</button>
                     </div>
                 </div>
             </div>
         </div>
         
         <!-- KPI SECTION -->
-        <div class="row mb-4">
-            <div class="col-lg-3 col-md-6 mb-3">
+        <div class="row mt-3">
+            <div class="col-lg-3 col-md-6">
                 <div class="card bg-primary text-white h-100">
                     <div class="card-body">
-                        <h6 class="card-title">Total Stock at GNDP Value</h6>
-                        <p style="font-size: 2rem; font-weight: 700; margin: 0;" id="totalGndp">{formatted_gndp}</p>
+                        <h6 style="color: white;">Total Stock at GNDP Value</h6>
+                        <p style="font-size: clamp(1.5rem, 5vw, 2rem); font-weight: 700; margin: 0; color: white;" id="totalGndp">{formatted_gndp}</p>
                     </div>
                 </div>
             </div>
             
-            <div class="col-lg-3 col-md-6 mb-3">
+            <div class="col-lg-3 col-md-6">
                 <div class="filter-card">
-                    <label class="form-label" style="font-weight: 600; font-size: 0.9rem;">Spare Ageing</label>
-                    <select class="form-select form-select-sm selectpicker" id="movementCategory" multiple data-live-search="true" title="Select categories...">
+                    <label>Spare Ageing</label>
+                    <select class="form-select form-select-sm selectpicker" id="movementCategory" multiple data-live-search="true" title="Select...">
                         {movement_categories_options}
                     </select>
                 </div>
             </div>
             
-            <div class="col-lg-3 col-md-6 mb-3">
+            <div class="col-lg-3 col-md-6">
                 <div class="filter-card">
-                    <label class="form-label" style="font-weight: 600; font-size: 0.9rem;">Part Category</label>
-                    <select class="form-select form-select-sm selectpicker" id="partCategory" multiple data-live-search="true" title="Select Part Category...">
+                    <label>Part Category</label>
+                    <select class="form-select form-select-sm selectpicker" id="partCategory" multiple data-live-search="true" title="Select...">
                         {part_categories_options}
                     </select>
                 </div>
             </div>
             
-            <div class="col-lg-3 col-md-6 mb-3">
+            <div class="col-lg-3 col-md-6">
                 <div class="filter-card">
-                    <label class="form-label" style="font-weight: 600; font-size: 0.9rem;">ABC Category</label>
-                    <select class="form-select form-select-sm selectpicker" id="abcCategory" multiple data-live-search="true" title="Select ABC...">
+                    <label>ABC Category</label>
+                    <select class="form-select form-select-sm selectpicker" id="abcCategory" multiple data-live-search="true" title="Select...">
                         {abc_categories_options}
                     </select>
                 </div>
@@ -187,34 +369,34 @@
         </div>
         
         <!-- MORE FILTERS -->
-        <div class="row mb-4">
-            <div class="col-lg-3 col-md-6 mb-3">
+        <div class="row mt-2">
+            <div class="col-lg-3 col-md-6">
                 <div class="filter-card">
-                    <label class="form-label" style="font-weight: 600; font-size: 0.9rem;">RIS</label>
-                    <select class="form-select form-select-sm selectpicker" id="ris" multiple data-live-search="true" title="Select RIS...">
+                    <label>RIS</label>
+                    <select class="form-select form-select-sm selectpicker" id="ris" multiple data-live-search="true" title="Select...">
                         {ris_values_options}
                     </select>
                 </div>
             </div>
             
-            <div class="col-lg-3 col-md-6 mb-3">
+            <div class="col-lg-3 col-md-6">
                 <div class="filter-card">
-                    <label class="form-label" style="font-weight: 600; font-size: 0.9rem;">Location</label>
-                    <select class="form-select form-select-sm selectpicker" id="location" multiple data-live-search="true" title="Select locations...">
+                    <label>Location</label>
+                    <select class="form-select form-select-sm selectpicker" id="location" multiple data-live-search="true" title="Select...">
                         {locations_options}
                     </select>
                 </div>
             </div>
             
-            <div class="col-lg-3 col-md-6 mb-3">
+            <div class="col-lg-3 col-md-6">
                 <div class="filter-card">
-                    <label class="form-label" style="font-weight: 600; font-size: 0.9rem;">Part No.</label>
-                    <input type="text" class="form-control form-control-sm" id="partNumber" placeholder="Search Part Number...">
+                    <label>Part No.</label>
+                    <input type="text" class="form-control form-control-sm" id="partNumber" placeholder="Search Part...">
                 </div>
             </div>
             
-            <div class="col-lg-3 col-md-6 mb-3">
-                <div class="filter-card" style="display: flex; flex-direction: column; justify-content: flex-end;">
+            <div class="col-lg-3 col-md-6">
+                <div class="filter-card">
                     <div class="row g-2">
                         <div class="col-6">
                             <button id="applyFilters" class="btn btn-primary btn-sm w-100">
@@ -232,10 +414,10 @@
         </div>
         
         <!-- SUMMARY TABLE -->
-        <div class="card mb-4">
+        <div class="card mt-3">
             <div class="card-body">
-                <div class="d-flex justify-content-between align-items-center mb-3">
-                    <h5 class="mb-0">Location Wise Spare Aging Summary</h5>
+                <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+                    <h5 class="mb-0">Location Wise Summary</h5>
                     <button id="downloadSummaryCsv" class="btn btn-info btn-sm">
                         <i class="bi bi-download"></i> Download
                     </button>
@@ -245,11 +427,11 @@
                         <thead class="table-dark">
                             <tr>
                                 <th>Location</th>
-                                <th colspan="2" class="text-center">0-90 Days</th>
-                                <th colspan="2" class="text-center">91-180 Days</th>
-                                <th colspan="2" class="text-center">181-365 Days</th>
-                                <th colspan="2" class="text-center">366-730 Days</th>
-                                <th colspan="2" class="text-center">730+ Days</th>
+                                <th colspan="2" class="text-center">0-90</th>
+                                <th colspan="2" class="text-center">91-180</th>
+                                <th colspan="2" class="text-center">181-365</th>
+                                <th colspan="2" class="text-center">366-730</th>
+                                <th colspan="2" class="text-center">730+</th>
                             </tr>
                         </thead>
                         <tbody></tbody>
@@ -260,19 +442,15 @@
         </div>
         
         <!-- LOCATION WISE PART CATEGORY TABLE -->
-        <div class="card mb-4">
+        <div class="card mt-3">
             <div class="card-body">
-                <div class="row align-items-center">
-                    <div class="col-md-6">
-                        <h5 class="mb-0">Location Wise Part Category</h5>
-                    </div>
-                    <div class="col-md-6 text-end">
-                        <button id="downloadPartCategoryCsv" class="btn btn-info btn-sm">
-                            <i class="bi bi-download"></i> Download Part Category
-                        </button>
-                    </div>
+                <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+                    <h5 class="mb-0">Part Category Breakdown</h5>
+                    <button id="downloadPartCategoryCsv" class="btn btn-info btn-sm">
+                        <i class="bi bi-download"></i> Download
+                    </button>
                 </div>
-                <div class="table-responsive mt-2">
+                <div class="table-responsive">
                     <table class="table table-striped table-hover table-sm table-bordered" id="partCategoryTable">
                         <thead class="table-dark">
                             <tr id="partCategoryHeaders">
@@ -281,7 +459,7 @@
                             </tr>
                         </thead>
                         <tbody></tbody>
-                        <tfoot style="background-color: #ff9800 !important; color: white !important; font-weight: bold !important;">
+                        <tfoot style="background-color: #ff9800; color: white; font-weight: bold;">
                             <tr id="partCategoryTotal"></tr>
                         </tfoot>
                     </table>
@@ -290,9 +468,9 @@
         </div>
         
         <!-- DATA TABLE -->
-        <div class="card">
+        <div class="card mt-3">
             <div class="card-body">
-                <div class="d-flex justify-content-between align-items-center mb-3">
+                <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
                     <h5 class="mb-0">Details <span id="recordCount" class="text-muted">(0 Records)</span></h5>
                     <button id="downloadCsv" class="btn btn-success btn-sm">
                         <i class="bi bi-download"></i> Download
@@ -300,7 +478,7 @@
                 </div>
                 <div class="table-responsive">
                     <table class="table table-striped table-hover table-sm" id="dataTable">
-                        <thead>
+                        <thead class="table-dark">
                             <tr>
                                 <th>Part No.</th>
                                 <th>Description</th>
@@ -313,7 +491,7 @@
                         <tbody></tbody>
                     </table>
                 </div>
-                <nav aria-label="Pagination">
+                <nav aria-label="Pagination" class="mt-3">
                     <ul class="pagination pagination-sm justify-content-center" id="pagination"></ul>
                 </nav>
             </div>
@@ -390,18 +568,18 @@
                 method: 'GET',
                 success: function(response) {
                     $('#deadStockCurrentAsOnCount').text(response.current_month_as_on_date.count);
-                    $('#deadStockCurrentAsOnValue').text('₹' + formatIndianNumber(response.current_month_as_on_date.value));
+                    $('#deadStockCurrentAsOnValue').text(formatIndianNumber(response.current_month_as_on_date.value));
                     $('#deadStockCurrentCompleteCount').text(response.current_month_complete.count);
-                    $('#deadStockCurrentCompleteValue').text('₹' + formatIndianNumber(response.current_month_complete.value));
+                    $('#deadStockCurrentCompleteValue').text(formatIndianNumber(response.current_month_complete.value));
                     $('#deadStockLastCount').text(response.last_month.count);
-                    $('#deadStockLastValue').text('₹' + formatIndianNumber(response.last_month.value));
+                    $('#deadStockLastValue').text(formatIndianNumber(response.last_month.value));
                     $('#deadStockLastToLastCount').text(response.last_to_last_month.count);
-                    $('#deadStockLastToLastValue').text('₹' + formatIndianNumber(response.last_to_last_month.value));
+                    $('#deadStockLastToLastValue').text(formatIndianNumber(response.last_to_last_month.value));
                     $('#deadStockTotalCount').text(response.total.count);
-                    $('#deadStockTotalValue').text('₹' + formatIndianNumber(response.total.value));
+                    $('#deadStockTotalValue').text(formatIndianNumber(response.total.value));
                     if (response.last_month_liquidation) {
                         $('#lastMonthLiquidationCount').text(response.last_month_liquidation.count);
-                        $('#lastMonthLiquidationValue').text('₹' + formatIndianNumber(response.last_month_liquidation.value));
+                        $('#lastMonthLiquidationValue').text(formatIndianNumber(response.last_month_liquidation.value));
                     }
                 }
             });
@@ -419,9 +597,6 @@
                     $('#summaryTable tfoot').empty();
                     
                     response.summary.forEach(row => {
-                        const totalCount = row.aging_0_90_count + row.aging_91_180_count + row.aging_181_365_count + row.aging_366_730_count + row.aging_730_plus_count;
-                        const totalValue = row.aging_0_90_value + row.aging_91_180_value + row.aging_181_365_value + row.aging_366_730_value + row.aging_730_plus_value;
-                        
                         $('#summaryTable tbody').append(`
                             <tr>
                                 <td class="fw-bold">${row.location}</td>
@@ -440,9 +615,6 @@
                     });
                     
                     const total = response.total;
-                    const grandTotalCount = total.aging_0_90_count + total.aging_91_180_count + total.aging_181_365_count + total.aging_366_730_count + total.aging_730_plus_count;
-                    const grandTotalValue = total.aging_0_90_value + total.aging_91_180_value + total.aging_181_365_value + total.aging_366_730_value + total.aging_730_plus_value;
-                    
                     $('#summaryTable tfoot').html(`
                         <tr class="table-warning fw-bold">
                             <td class="fw-bold">TOTAL</td>
@@ -492,14 +664,14 @@
                     });
                     
                     let footerHtml = '<tr style="background-color: #ff9800; color: white;">';
-                    footerHtml += '<td class="fw-bold" style="color: white; text-align: left; background-color: #ff9800; padding: 0.10rem 0.08rem; font-size: 0.85rem; border: 1px solid #ff5500;">Total</td>';
+                    footerHtml += '<td class="fw-bold" style="color: white;">Total</td>';
                     let grandTotal = 0;
                     partCategories.forEach(cat => {
                         const total = response.total[cat] || 0;
-                        footerHtml += `<td class="fw-bold" style="color: white; text-align: right; background-color: #ff9800; padding: 0.10rem 0.08rem; font-size: 0.85rem; border: 1px solid #ff5500;">${formatIndianNumber(total)}</td>`;
+                        footerHtml += `<td class="fw-bold text-end" style="color: white;">${formatIndianNumber(total)}</td>`;
                         grandTotal += total;
                     });
-                    footerHtml += `<td class="fw-bold" style="color: white; text-align: right; background-color: #ff9800; padding: 0.10rem 0.08rem; font-size: 0.85rem; border: 1px solid #ff5500;">${formatIndianNumber(grandTotal)}</td></tr>`;
+                    footerHtml += `<td class="fw-bold text-end" style="color: white;">${formatIndianNumber(grandTotal)}</td></tr>`;
                     $('#partCategoryTable tfoot').html(footerHtml);
                 }
             });
@@ -553,7 +725,7 @@
             
             $('#pagination').append(`
                 <li class="page-item ${currentPage === 1 ? 'disabled' : ''}">
-                    <a class="page-link" href="#" data-page="${currentPage - 1}">Previous</a>
+                    <a class="page-link" href="#" data-page="${currentPage - 1}">Prev</a>
                 </li>
             `);
             
@@ -595,6 +767,7 @@
                 if (page > 0) {
                     currentPage = page;
                     loadData();
+                    $('html, body').animate({scrollTop: 0}, 'smooth');
                 }
             });
             
