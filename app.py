@@ -1,12 +1,11 @@
 import pandas as pd
 from datetime import datetime, timedelta
 import uvicorn
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 import os
-import socket
 from typing import Optional
 import sys
 import numpy as np
@@ -514,15 +513,15 @@ print(f"  - Part Categories: {len(part_categories)}")
 
 @app.get("/health")
 async def health_check():
-    """Health check endpoint - keeps app warm on Render"""
+    """Health check endpoint"""
     return {"status": "ok", "records": len(df), "timestamp": datetime.now().isoformat()}
 
 @app.get("/")
 async def dashboard():
     """Main dashboard endpoint"""
-    html_file = Path("templates/index.html")
+    html_file = Path("index.html")
     if not html_file.exists():
-        return HTMLResponse(content="<h1>Error: HTML template not found at templates/index.html</h1>")
+        return HTMLResponse(content="<h1>Error: HTML template not found at index.html</h1>")
     
     with open(html_file, "r", encoding="utf-8") as f:
         html_content = f.read()
@@ -1070,26 +1069,9 @@ async def download_last_month_liquidation_csv(
     
     return FileResponse(path=output_path, filename=filename, media_type='text/csv')
 
+
 # ============= SERVER STARTUP =============
 
 if __name__ == "__main__":
-    hostname = socket.gethostname()
-    try:
-        local_ip = socket.gethostbyname(hostname)
-    except:
-        local_ip = "127.0.0.1"
-    
     port = int(os.environ.get("PORT", 8004))
-    
-    print("\n" + "=" * 70)
-    print(f"✅ Server ready! Access the dashboard at:")
-    print(f"   🌐 Local: http://localhost:{port}")
-    print(f"   🌐 Network: http://{local_ip}:{port}")
-    print("=" * 70 + "\n")
-    
-    uvicorn.run(
-        app, 
-        host="0.0.0.0", 
-        port=port,
-        log_level="info"
-    )
+    uvicorn.run(app, host="0.0.0.0", port=port)
