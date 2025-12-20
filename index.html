@@ -344,7 +344,7 @@
                     </div>
                 </div>
                 <small class="text-white mt-2 d-block">
-                    <i class="bi bi-info-circle"></i> Shows parts purchased in LAST YEAR's selected range that were NEVER sold (true dead stock)
+                    <i class="bi bi-info-circle"></i> Select dates and click "Apply Date Range" to filter dead stock. Leave empty to show all data.
                 </small>
             </div>
         </div>
@@ -575,9 +575,7 @@
         $(document).ready(function() {
             $('.selectpicker').selectpicker();
             
-            // Set today's date as default in To Date
-            const today = new Date().toISOString().split('T')[0];
-            $('#toDate').val(today);
+            // Don't set default dates - let user choose when to apply date range
             
             setupEventListeners();
             
@@ -855,7 +853,7 @@
                 $('.selectpicker').selectpicker('deselectAll');
                 $('#partNumber').val('');
                 $('#fromDate').val('');
-                $('#toDate').val(new Date().toISOString().split('T')[0]);
+                $('#toDate').val('');  // Clear to date as well
                 currentPage = 1;
                 loadAllData();
             });
