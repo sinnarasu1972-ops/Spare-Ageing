@@ -497,6 +497,7 @@
                                 <th colspan="2" class="text-center">181-365</th>
                                 <th colspan="2" class="text-center">366-730</th>
                                 <th colspan="2" class="text-center">730+</th>
+                                <th class="text-center" style="background-color: #2196F3;">Row Total</th>
                             </tr>
                         </thead>
                         <tbody></tbody>
@@ -685,6 +686,11 @@
                     $('#summaryTable tfoot').empty();
                     
                     response.summary.forEach(row => {
+                        // Calculate row total (sum of all value columns)
+                        const rowTotal = row.aging_0_90_value + row.aging_91_180_value + 
+                                       row.aging_181_365_value + row.aging_366_730_value + 
+                                       row.aging_730_plus_value;
+                        
                         $('#summaryTable tbody').append(`
                             <tr>
                                 <td class="fw-bold">${row.location}</td>
@@ -698,11 +704,17 @@
                                 <td class="text-end">${formatIndianNumber(row.aging_366_730_value)}</td>
                                 <td class="text-end">${row.aging_730_plus_count}</td>
                                 <td class="text-end">${formatIndianNumber(row.aging_730_plus_value)}</td>
+                                <td class="text-end fw-bold" style="background-color: #E3F2FD;">${formatIndianNumber(rowTotal)}</td>
                             </tr>
                         `);
                     });
                     
                     const total = response.total;
+                    // Calculate grand total (sum of all value columns in total row)
+                    const grandTotal = total.aging_0_90_value + total.aging_91_180_value + 
+                                     total.aging_181_365_value + total.aging_366_730_value + 
+                                     total.aging_730_plus_value;
+                    
                     $('#summaryTable tfoot').html(`
                         <tr class="table-warning fw-bold">
                             <td class="fw-bold">TOTAL</td>
@@ -716,6 +728,7 @@
                             <td class="text-end">${formatIndianNumber(total.aging_366_730_value)}</td>
                             <td class="text-end">${total.aging_730_plus_count}</td>
                             <td class="text-end">${formatIndianNumber(total.aging_730_plus_value)}</td>
+                            <td class="text-end" style="background-color: #FFD54F;">${formatIndianNumber(grandTotal)}</td>
                         </tr>
                     `);
                 }
