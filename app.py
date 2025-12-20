@@ -14,12 +14,14 @@ from pathlib import Path
 # ============= GLOBAL VARIABLES =============
 excel_file_path = "./Spares Ageing Report.xlsx"
 csv_file_path = "./Spares Ageing Report_Processed.csv"
+accessories_model_file = "./Accessories_Model.xlsx"
 last_file_modified = None
 last_reload_time = None
 df = None
 total_gndp = 0
 gndp_column = None
 excel_error = None
+accessories_mapping = {}
 
 # Column references
 location_col = None
@@ -92,6 +94,42 @@ def format_indian_number(num):
         return ("-" + result) if actual_value < 0 else result
     except:
         return "0"
+
+def load_accessories_mapping():
+    """Load accessories model mapping from Excel file"""
+    global accessories_mapping
+    try:
+        if os.path.exists(accessories_model_file):
+            acc_df = pd.read_excel(accessories_model_file)
+            # Create mapping dictionary: part prefix -> vehicle details
+            for _, row in acc_df.iterrows():
+                part_prefix = str(row['PART NO ']).strip().upper()
+                vehicle_details = str(row['Vehicle Details']).strip()
+                accessories_mapping[part_prefix] = vehicle_details
+            print(f"✓ Loaded {len(accessories_mapping)} accessories model mappings")
+            return True
+        else:
+            print(f"⚠️  Accessories model file not found: {accessories_model_file}")
+            return False
+    except Exception as e:
+        print(f"⚠️  Error loading accessories mapping: {e}")
+        return False
+
+def get_model_group(part_no):
+    """Get model group based on part number prefix"""
+    if pd.isna(part_no) or part_no == "":
+        return ""
+    
+    part_str = str(part_no).strip().upper()
+    
+    # Try matching with different prefix lengths (4, 3, 2 characters)
+    for prefix_len in [4, 3, 2]:
+        if len(part_str) >= prefix_len:
+            prefix = part_str[:prefix_len]
+            if prefix in accessories_mapping:
+                return accessories_mapping[prefix]
+    
+    return ""  # No match found
 
 # ============= EXCEL PROCESSING =============
 
@@ -324,6 +362,24 @@ def process_excel_to_csv():
         print(f"✓ Total Stock at GNDP Value: {total_gndp_calc:.2f} Lac")
     else:
         total_gndp_calc = 0
+    
+    # Load accessories mapping and add Model Group column
+    print("\nAdding Model Group column...")
+    load_accessories_mapping()
+    
+    # Find Part No column
+    part_no_col_local = None
+    for col in df.columns:
+        if 'part' in str(col).lower() and 'no' in str(col).lower() and 'description' not in str(col).lower():
+            part_no_col_local = col
+            break
+    
+    if part_no_col_local:
+        df['Model Group'] = df[part_no_col_local].apply(get_model_group)
+        print(f"✓ Model Group column added based on {part_no_col_local}")
+    else:
+        df['Model Group'] = ""
+        print("⚠️  Part No column not found, Model Group column will be empty")
     
     try:
         df.to_csv(output_csv, index=False)
