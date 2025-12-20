@@ -39,7 +39,6 @@
             border-radius: 12px;
             box-shadow: 0 4px 15px rgba(37, 99, 235, 0.2);
             margin-bottom: 20px;
-            text-align: center;
         }
         
         .header-section h1 {
@@ -62,6 +61,44 @@
             font-size: clamp(0.7rem, 2.5vw, 0.75rem);
             display: block;
             margin-top: 5px;
+        }
+
+        .date-range-section {
+            background: rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(10px);
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 15px;
+        }
+
+        .date-range-section label {
+            color: white;
+            font-size: clamp(0.8rem, 2.5vw, 0.9rem);
+            font-weight: 600;
+            margin-bottom: 5px;
+            display: block;
+        }
+
+        .date-range-section input[type="date"] {
+            background: white;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 8px;
+            padding: 8px 12px;
+            color: #1e293b;
+            font-size: clamp(0.8rem, 2.5vw, 0.9rem);
+            width: 100%;
+        }
+
+        .date-range-section input[type="date"]:focus {
+            outline: none;
+            border-color: #f59e0b;
+            box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.2);
+        }
+
+        .date-range-section .btn {
+            margin-top: 10px;
+            font-size: clamp(0.8rem, 2.5vw, 0.9rem);
+            padding: 8px 16px;
         }
         
         .dead-stock-grid {
@@ -277,11 +314,36 @@
 </head>
 <body>
     <div class="container-fluid p-3 p-md-4">
-        <!-- HEADER -->
+        <!-- HEADER WITH DATE RANGE -->
         <div class="header-section">
-            <h1>📊 Unnati Motors Mahindra</h1>
-            <p class="subtitle">Spare Parts Ageing Dashboard</p>
-            <small style="opacity: 0.9;">Last Updated: {last_reload_time}</small>
+            <div class="text-center">
+                <h1>📊 Unnati Motors Mahindra</h1>
+                <p class="subtitle">Spare Parts Ageing Dashboard</p>
+                <small style="opacity: 0.9;">Last Updated: {last_reload_time}</small>
+            </div>
+            
+            <!-- DATE RANGE SECTION -->
+            <div class="date-range-section">
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <label for="fromDate">
+                            <i class="bi bi-calendar-event"></i> From Date
+                        </label>
+                        <input type="date" class="form-control" id="fromDate" />
+                    </div>
+                    <div class="col-md-4">
+                        <label for="toDate">
+                            <i class="bi bi-calendar-check"></i> To Date
+                        </label>
+                        <input type="date" class="form-control" id="toDate" />
+                    </div>
+                    <div class="col-md-4 d-flex align-items-end">
+                        <button class="btn btn-warning w-100" id="applyDateRange">
+                            <i class="bi bi-funnel-fill"></i> Apply Date Range
+                        </button>
+                    </div>
+                </div>
+            </div>
         </div>
         
         <!-- DEAD STOCK SECTION -->
@@ -509,6 +571,11 @@
         
         $(document).ready(function() {
             $('.selectpicker').selectpicker();
+            
+            // Set today's date as default
+            const today = new Date().toISOString().split('T')[0];
+            $('#toDate').val(today);
+            
             setupEventListeners();
             
             setTimeout(() => {
@@ -537,7 +604,9 @@
                 location: $('#location').val() || [],
                 abcCategory: $('#abcCategory').val() || [],
                 ris: $('#ris').val() || [],
-                partNumber: $('#partNumber').val().trim()
+                partNumber: $('#partNumber').val().trim(),
+                fromDate: $('#fromDate').val(),
+                toDate: $('#toDate').val()
             };
         }
         
@@ -549,6 +618,8 @@
             if (filters.abcCategory.length) params.append('abc_category', filters.abcCategory.join(','));
             if (filters.ris.length) params.append('ris', filters.ris.join(','));
             if (filters.partNumber) params.append('part_number', filters.partNumber);
+            if (filters.fromDate) params.append('from_date', filters.fromDate);
+            if (filters.toDate) params.append('to_date', filters.toDate);
             return params.toString();
         }
         
@@ -753,10 +824,18 @@
                 currentPage = 1;
                 loadAllData();
             });
+
+            $('#applyDateRange').click(function() {
+                currentPage = 1;
+                loadAllData();
+            });
             
             $('#clearFilters').click(function() {
                 $('.selectpicker').selectpicker('deselectAll');
                 $('#partNumber').val('');
+                $('#fromDate').val('');
+                const today = new Date().toISOString().split('T')[0];
+                $('#toDate').val(today);
                 currentPage = 1;
                 loadAllData();
             });
