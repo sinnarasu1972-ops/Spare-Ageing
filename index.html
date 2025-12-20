@@ -343,13 +343,16 @@
                         </button>
                     </div>
                 </div>
+                <small class="text-white mt-2 d-block">
+                    <i class="bi bi-info-circle"></i> Shows parts purchased in date range that were NOT sold for 12 months
+                </small>
             </div>
         </div>
         
         <!-- DEAD STOCK SECTION -->
         <div class="card bg-danger text-white">
             <div class="card-body">
-                <h4 style="margin-bottom: 15px; font-weight: 700; color: white;">😰 Dead Stock Monitor</h4>
+                <h4 style="margin-bottom: 15px; font-weight: 700; color: white;">😰 Dead Stock Monitor <small>(Not affected by date range)</small></h4>
                 <div class="dead-stock-grid">
                     <div class="dead-stock-card current">
                         <h6>Current Month (As on Date)</h6>
@@ -572,7 +575,7 @@
         $(document).ready(function() {
             $('.selectpicker').selectpicker();
             
-            // Set today's date as default
+            // Set today's date as default in To Date
             const today = new Date().toISOString().split('T')[0];
             $('#toDate').val(today);
             
@@ -610,6 +613,7 @@
             };
         }
         
+        // Build query string for tables (includes dates)
         function buildQueryString(filters) {
             const params = new URLSearchParams();
             if (filters.movementCategory.length) params.append('movement_category', filters.movementCategory.join(','));
@@ -623,6 +627,18 @@
             return params.toString();
         }
         
+        // Build query string for dead stock (excludes dates)
+        function buildQueryStringNoDate(filters) {
+            const params = new URLSearchParams();
+            if (filters.movementCategory.length) params.append('movement_category', filters.movementCategory.join(','));
+            if (filters.partCategory.length) params.append('part_category', filters.partCategory.join(','));
+            if (filters.location.length) params.append('location', filters.location.join(','));
+            if (filters.abcCategory.length) params.append('abc_category', filters.abcCategory.join(','));
+            if (filters.ris.length) params.append('ris', filters.ris.join(','));
+            if (filters.partNumber) params.append('part_number', filters.partNumber);
+            return params.toString();
+        }
+        
         function loadAllData() {
             loadData();
             loadSummary();
@@ -630,9 +646,10 @@
             loadDeadStockSummary();
         }
         
+        // Dead Stock Summary - NOT affected by date range
         function loadDeadStockSummary() {
             const filters = getFilters();
-            const queryString = buildQueryString(filters);
+            const queryString = buildQueryStringNoDate(filters);  // No dates!
             
             $.ajax({
                 url: `/dead-stock-summary?${queryString}`,
@@ -656,9 +673,10 @@
             });
         }
         
+        // Summary - Affected by date range
         function loadSummary() {
             const filters = getFilters();
-            const queryString = buildQueryString(filters);
+            const queryString = buildQueryString(filters);  // Includes dates!
             
             $.ajax({
                 url: `/summary?${queryString}`,
@@ -705,9 +723,10 @@
             });
         }
         
+        // Part Category Summary - Affected by date range
         function loadPartCategorySummary() {
             const filters = getFilters();
-            const queryString = buildQueryString(filters);
+            const queryString = buildQueryString(filters);  // Includes dates!
             
             $.ajax({
                 url: `/location-part-category-summary?${queryString}`,
@@ -748,9 +767,10 @@
             });
         }
         
+        // Data table - Affected by date range
         function loadData() {
             const filters = getFilters();
-            const queryString = buildQueryString(filters);
+            const queryString = buildQueryString(filters);  // Includes dates!
             
             $.ajax({
                 url: `/data?page=${currentPage}&per_page=${perPage}&${queryString}`,
@@ -834,8 +854,7 @@
                 $('.selectpicker').selectpicker('deselectAll');
                 $('#partNumber').val('');
                 $('#fromDate').val('');
-                const today = new Date().toISOString().split('T')[0];
-                $('#toDate').val(today);
+                $('#toDate').val(new Date().toISOString().split('T')[0]);
                 currentPage = 1;
                 loadAllData();
             });
@@ -870,37 +889,37 @@
             
             $('#btnDeadStockCurrent').click(function() {
                 const filters = getFilters();
-                const queryString = buildQueryString(filters);
+                const queryString = buildQueryStringNoDate(filters);
                 window.location.href = `/download-dead-stock-csv?dead_stock_category=current_month_as_on_date&${queryString}`;
             });
             
             $('#btnDeadStockCurrentComplete').click(function() {
                 const filters = getFilters();
-                const queryString = buildQueryString(filters);
+                const queryString = buildQueryStringNoDate(filters);
                 window.location.href = `/download-dead-stock-csv?dead_stock_category=current_month_complete&${queryString}`;
             });
             
             $('#btnDeadStockLast').click(function() {
                 const filters = getFilters();
-                const queryString = buildQueryString(filters);
+                const queryString = buildQueryStringNoDate(filters);
                 window.location.href = `/download-dead-stock-csv?dead_stock_category=last_month&${queryString}`;
             });
             
             $('#btnDeadStockLastToLast').click(function() {
                 const filters = getFilters();
-                const queryString = buildQueryString(filters);
+                const queryString = buildQueryStringNoDate(filters);
                 window.location.href = `/download-dead-stock-csv?dead_stock_category=last_to_last_month&${queryString}`;
             });
             
             $('#btnDeadStockAll').click(function() {
                 const filters = getFilters();
-                const queryString = buildQueryString(filters);
+                const queryString = buildQueryStringNoDate(filters);
                 window.location.href = `/download-dead-stock-csv?dead_stock_category=all&${queryString}`;
             });
             
             $('#btnLastMonthLiquidation').click(function() {
                 const filters = getFilters();
-                const queryString = buildQueryString(filters);
+                const queryString = buildQueryStringNoDate(filters);
                 window.location.href = `/download-last-month-liquidation-csv?${queryString}`;
             });
         }
