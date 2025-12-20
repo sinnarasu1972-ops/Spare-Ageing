@@ -625,7 +625,7 @@ def apply_filters(filtered_df, movement_category, part_category, location, abc_c
     
     # Date range filtering for dead stock
     # Logic: If user selects Sept 1-30 (current year), show parts purchased in LAST YEAR Sept 1-30
-    # that were NOT sold during the entire 12-month period from last year Sept to current year Sept
+    # that were NEVER SOLD or have invalid issue dates (issue before purchase)
     if (from_date or to_date) and last_purchase_col in filtered_df.columns and last_issue_col in filtered_df.columns:
         try:
             # Convert dates
@@ -643,27 +643,25 @@ def apply_filters(filtered_df, movement_category, part_category, location, abc_c
                 # Filter: Purchase date should be in LAST YEAR's date range
                 purchase_in_last_year_range = (purchase_dates >= last_year_from) & (purchase_dates <= last_year_to)
                 
-                # Dead stock logic: NOT sold during entire 12-month period
-                # Period: from purchase date to current year's selected date
+                # Dead stock logic: NEVER sold or invalid issue date
+                # We want parts that have NO sales at all (true dead stock)
                 
-                # Option 1: No issue date at all
+                # Option 1: No issue date at all (never sold)
                 no_issue_mask = issue_dates.isna()
                 
-                # Option 2: Issue date is before the purchase date (invalid/old issue)
+                # Option 2: Issue date is before the purchase date (invalid/old issue data)
                 issue_before_purchase = issue_dates < purchase_dates
                 
-                # Option 3: Issue date is AFTER the current year's end date (sold after the 12-month period)
-                issue_after_period = issue_dates > to_date_obj
-                
-                # Dead stock: Purchased in last year range AND (no issue OR issue before purchase OR issued after period)
-                dead_stock_mask = purchase_in_last_year_range & (no_issue_mask | issue_before_purchase | issue_after_period)
+                # Dead stock: Purchased in last year range AND (no issue OR issue before purchase)
+                # We do NOT include parts sold after the period - they are not dead stock, just slow-moving
+                dead_stock_mask = purchase_in_last_year_range & (no_issue_mask | issue_before_purchase)
                 
                 filtered_df = filtered_df[dead_stock_mask]
                 
                 print(f"Date range filter applied:")
                 print(f"  - Selected range: {from_date_obj.date()} to {to_date_obj.date()}")
                 print(f"  - Purchase range (last year): {last_year_from.date()} to {last_year_to.date()}")
-                print(f"  - Checking for no sales until: {to_date_obj.date()}")
+                print(f"  - Showing only parts with NO issue date or issue before purchase")
                 print(f"  - Found {len(filtered_df)} dead stock parts")
             
             elif from_date:
@@ -673,12 +671,11 @@ def apply_filters(filtered_df, movement_category, part_category, location, abc_c
                 # Purchase after last year's from date
                 purchase_in_last_year = purchase_dates >= last_year_from
                 
-                # Not issued or issued before purchase or issued after current from_date
+                # Never issued or issued before purchase
                 no_issue_mask = issue_dates.isna()
                 issue_before_purchase = issue_dates < purchase_dates
-                issue_after_from = issue_dates > from_date_obj
                 
-                dead_stock_mask = purchase_in_last_year & (no_issue_mask | issue_before_purchase | issue_after_from)
+                dead_stock_mask = purchase_in_last_year & (no_issue_mask | issue_before_purchase)
                 filtered_df = filtered_df[dead_stock_mask]
                 
             elif to_date:
@@ -688,12 +685,11 @@ def apply_filters(filtered_df, movement_category, part_category, location, abc_c
                 # Purchase before last year's to date
                 purchase_in_last_year = purchase_dates <= last_year_to
                 
-                # Not issued within the period
+                # Never issued or issued before purchase
                 no_issue_mask = issue_dates.isna()
                 issue_before_purchase = issue_dates < purchase_dates
-                issue_after_to = issue_dates > to_date_obj
                 
-                dead_stock_mask = purchase_in_last_year & (no_issue_mask | issue_before_purchase | issue_after_to)
+                dead_stock_mask = purchase_in_last_year & (no_issue_mask | issue_before_purchase)
                 filtered_df = filtered_df[dead_stock_mask]
             
         except Exception as e:
