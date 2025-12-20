@@ -598,8 +598,8 @@ async def dashboard():
     
     return HTMLResponse(content=html_content)
 
-def apply_filters(filtered_df, movement_category, part_category, location, abc_category, ris, part_number):
-    """Apply all filters"""
+def apply_filters(filtered_df, movement_category, part_category, location, abc_category, ris, part_number, from_date=None, to_date=None):
+    """Apply all filters including date range"""
     if movement_category:
         categories_list = movement_category.split(',')
         filtered_df = filtered_df[filtered_df['Movement Category P (2)'].isin(categories_list)]
@@ -623,6 +623,22 @@ def apply_filters(filtered_df, movement_category, part_category, location, abc_c
     if part_number and part_no_col in filtered_df.columns:
         filtered_df = filtered_df[filtered_df[part_no_col].astype(str).str.contains(part_number, case=False, na=False)]
     
+    # Date range filtering
+    if (from_date or to_date) and last_purchase_col in filtered_df.columns:
+        try:
+            # Convert purchase dates to datetime
+            purchase_dates = pd.to_datetime(filtered_df[last_purchase_col].astype(str).str[:10], errors='coerce')
+            
+            if from_date:
+                from_date_obj = pd.to_datetime(from_date)
+                filtered_df = filtered_df[purchase_dates >= from_date_obj]
+            
+            if to_date:
+                to_date_obj = pd.to_datetime(to_date)
+                filtered_df = filtered_df[purchase_dates <= to_date_obj]
+        except Exception as e:
+            print(f"Date filtering error: {e}")
+    
     return filtered_df
 
 @app.get("/summary")
@@ -632,13 +648,15 @@ async def get_summary(
     location: Optional[str] = None,
     abc_category: Optional[str] = None,
     ris: Optional[str] = None,
-    part_number: Optional[str] = None
+    part_number: Optional[str] = None,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None
 ):
     """Get summary by location"""
     if df is None:
         return {"error": "Data not available"}
     
-    filtered_df = apply_filters(df.copy(), movement_category, part_category, location, abc_category, ris, part_number)
+    filtered_df = apply_filters(df.copy(), movement_category, part_category, location, abc_category, ris, part_number, from_date, to_date)
     
     summary_data = []
     
@@ -683,13 +701,15 @@ async def calculate_gndp(
     location: Optional[str] = None,
     abc_category: Optional[str] = None,
     ris: Optional[str] = None,
-    part_number: Optional[str] = None
+    part_number: Optional[str] = None,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None
 ):
     """Calculate GNDP for filtered data"""
     if df is None:
         return {"total_gndp": 0}
     
-    filtered_df = apply_filters(df.copy(), movement_category, part_category, location, abc_category, ris, part_number)
+    filtered_df = apply_filters(df.copy(), movement_category, part_category, location, abc_category, ris, part_number, from_date, to_date)
     total_gndp_calc = filtered_df[gndp_column].sum() if gndp_column in filtered_df.columns else 0
     return {"total_gndp": total_gndp_calc}
 
@@ -702,13 +722,15 @@ async def get_data(
     location: Optional[str] = None,
     abc_category: Optional[str] = None,
     ris: Optional[str] = None,
-    part_number: Optional[str] = None
+    part_number: Optional[str] = None,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None
 ):
     """Get paginated data"""
     if df is None:
         return {"data": [], "page": 1, "per_page": per_page, "total_records": 0, "total_pages": 0}
     
-    filtered_df = apply_filters(df.copy(), movement_category, part_category, location, abc_category, ris, part_number)
+    filtered_df = apply_filters(df.copy(), movement_category, part_category, location, abc_category, ris, part_number, from_date, to_date)
     
     total_records = len(filtered_df)
     total_pages = (total_records + per_page - 1) // per_page if total_records > 0 else 0
@@ -734,13 +756,15 @@ async def get_location_part_category_summary(
     location: Optional[str] = None,
     abc_category: Optional[str] = None,
     ris: Optional[str] = None,
-    part_number: Optional[str] = None
+    part_number: Optional[str] = None,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None
 ):
     """Get part category summary"""
     if df is None:
         return {"summary": [], "total": {}, "part_categories": []}
     
-    filtered_df = apply_filters(df.copy(), movement_category, part_category, location, abc_category, ris, part_number)
+    filtered_df = apply_filters(df.copy(), movement_category, part_category, location, abc_category, ris, part_number, from_date, to_date)
     
     all_part_categories = sorted(filtered_df[part_category_col].dropna().unique().tolist()) if part_category_col and part_category_col in filtered_df.columns else []
     
@@ -784,7 +808,9 @@ async def get_dead_stock_summary(
     location: Optional[str] = None,
     abc_category: Optional[str] = None,
     ris: Optional[str] = None,
-    part_number: Optional[str] = None
+    part_number: Optional[str] = None,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None
 ):
     """Get dead stock summary"""
     if df is None:
@@ -797,7 +823,7 @@ async def get_dead_stock_summary(
             "last_month_liquidation": {"count": 0, "value": 0}
         }
     
-    filtered_df = apply_filters(df.copy(), movement_category, part_category, location, abc_category, ris, part_number)
+    filtered_df = apply_filters(df.copy(), movement_category, part_category, location, abc_category, ris, part_number, from_date, to_date)
     
     today = datetime.now().date()
     current_month_start = today.replace(day=1)
@@ -886,13 +912,15 @@ async def download_csv(
     location: Optional[str] = None,
     abc_category: Optional[str] = None,
     ris: Optional[str] = None,
-    part_number: Optional[str] = None
+    part_number: Optional[str] = None,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None
 ):
     """Download filtered data as CSV"""
     if df is None:
         return {"error": "Data not available"}
     
-    filtered_df = apply_filters(df.copy(), movement_category, part_category, location, abc_category, ris, part_number)
+    filtered_df = apply_filters(df.copy(), movement_category, part_category, location, abc_category, ris, part_number, from_date, to_date)
     
     current_datetime = datetime.now().strftime("%d-%m-%Y_%H-%M-%S")
     locations_filter = location.split(',') if location and location.strip() else []
@@ -916,13 +944,15 @@ async def download_summary_csv(
     location: Optional[str] = None,
     abc_category: Optional[str] = None,
     ris: Optional[str] = None,
-    part_number: Optional[str] = None
+    part_number: Optional[str] = None,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None
 ):
     """Download summary as CSV"""
     if df is None:
         return {"error": "Data not available"}
     
-    filtered_df = apply_filters(df.copy(), movement_category, part_category, location, abc_category, ris, part_number)
+    filtered_df = apply_filters(df.copy(), movement_category, part_category, location, abc_category, ris, part_number, from_date, to_date)
     
     summary_data = []
     if location_col in filtered_df.columns:
@@ -976,13 +1006,15 @@ async def download_part_category_csv(
     location: Optional[str] = None,
     abc_category: Optional[str] = None,
     ris: Optional[str] = None,
-    part_number: Optional[str] = None
+    part_number: Optional[str] = None,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None
 ):
     """Download part category summary as CSV"""
     if df is None:
         return {"error": "Data not available"}
     
-    filtered_df = apply_filters(df.copy(), movement_category, part_category, location, abc_category, ris, part_number)
+    filtered_df = apply_filters(df.copy(), movement_category, part_category, location, abc_category, ris, part_number, from_date, to_date)
     
     all_part_categories = sorted(filtered_df[part_category_col].dropna().unique().tolist()) if part_category_col and part_category_col in filtered_df.columns else []
     summary_data = []
@@ -1036,13 +1068,15 @@ async def download_dead_stock_csv(
     location: Optional[str] = None,
     abc_category: Optional[str] = None,
     ris: Optional[str] = None,
-    part_number: Optional[str] = None
+    part_number: Optional[str] = None,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None
 ):
     """Download dead stock data as CSV"""
     if df is None:
         return {"error": "Data not available"}
     
-    filtered_df = apply_filters(df.copy(), movement_category, part_category, location, abc_category, ris, part_number)
+    filtered_df = apply_filters(df.copy(), movement_category, part_category, location, abc_category, ris, part_number, from_date, to_date)
     result_df = filtered_df[filtered_df['Is Dead Stock'] == True]
     
     current_datetime = datetime.now().strftime("%d-%m-%Y_%H-%M-%S")
@@ -1067,13 +1101,15 @@ async def download_last_month_liquidation_csv(
     location: Optional[str] = None,
     abc_category: Optional[str] = None,
     ris: Optional[str] = None,
-    part_number: Optional[str] = None
+    part_number: Optional[str] = None,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None
 ):
     """Download last month liquidation as CSV"""
     if df is None:
         return {"error": "Data not available"}
     
-    filtered_df = apply_filters(df.copy(), movement_category, part_category, location, abc_category, ris, part_number)
+    filtered_df = apply_filters(df.copy(), movement_category, part_category, location, abc_category, ris, part_number, from_date, to_date)
     lml_df = filtered_df
     
     current_datetime = datetime.now().strftime("%d-%m-%Y_%H-%M-%S")
