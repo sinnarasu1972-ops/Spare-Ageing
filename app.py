@@ -623,19 +623,79 @@ def apply_filters(filtered_df, movement_category, part_category, location, abc_c
     if part_number and part_no_col in filtered_df.columns:
         filtered_df = filtered_df[filtered_df[part_no_col].astype(str).str.contains(part_number, case=False, na=False)]
     
-    # Date range filtering
-    if (from_date or to_date) and last_purchase_col in filtered_df.columns:
+    # Date range filtering for dead stock
+    # Logic: If user selects Sept 1-30 (current year), show parts purchased in LAST YEAR Sept 1-30
+    # that were NOT sold during the entire 12-month period from last year Sept to current year Sept
+    if (from_date or to_date) and last_purchase_col in filtered_df.columns and last_issue_col in filtered_df.columns:
         try:
-            # Convert purchase dates to datetime
+            # Convert dates
             purchase_dates = pd.to_datetime(filtered_df[last_purchase_col].astype(str).str[:10], errors='coerce')
+            issue_dates = pd.to_datetime(filtered_df[last_issue_col].astype(str).str[:10], errors='coerce')
             
-            if from_date:
+            if from_date and to_date:
                 from_date_obj = pd.to_datetime(from_date)
-                filtered_df = filtered_df[purchase_dates >= from_date_obj]
-            
-            if to_date:
                 to_date_obj = pd.to_datetime(to_date)
-                filtered_df = filtered_df[purchase_dates <= to_date_obj]
+                
+                # Calculate LAST YEAR's date range
+                last_year_from = from_date_obj - pd.DateOffset(years=1)
+                last_year_to = to_date_obj - pd.DateOffset(years=1)
+                
+                # Filter: Purchase date should be in LAST YEAR's date range
+                purchase_in_last_year_range = (purchase_dates >= last_year_from) & (purchase_dates <= last_year_to)
+                
+                # Dead stock logic: NOT sold during entire 12-month period
+                # Period: from purchase date to current year's selected date
+                
+                # Option 1: No issue date at all
+                no_issue_mask = issue_dates.isna()
+                
+                # Option 2: Issue date is before the purchase date (invalid/old issue)
+                issue_before_purchase = issue_dates < purchase_dates
+                
+                # Option 3: Issue date is AFTER the current year's end date (sold after the 12-month period)
+                issue_after_period = issue_dates > to_date_obj
+                
+                # Dead stock: Purchased in last year range AND (no issue OR issue before purchase OR issued after period)
+                dead_stock_mask = purchase_in_last_year_range & (no_issue_mask | issue_before_purchase | issue_after_period)
+                
+                filtered_df = filtered_df[dead_stock_mask]
+                
+                print(f"Date range filter applied:")
+                print(f"  - Selected range: {from_date_obj.date()} to {to_date_obj.date()}")
+                print(f"  - Purchase range (last year): {last_year_from.date()} to {last_year_to.date()}")
+                print(f"  - Checking for no sales until: {to_date_obj.date()}")
+                print(f"  - Found {len(filtered_df)} dead stock parts")
+            
+            elif from_date:
+                from_date_obj = pd.to_datetime(from_date)
+                last_year_from = from_date_obj - pd.DateOffset(years=1)
+                
+                # Purchase after last year's from date
+                purchase_in_last_year = purchase_dates >= last_year_from
+                
+                # Not issued or issued before purchase or issued after current from_date
+                no_issue_mask = issue_dates.isna()
+                issue_before_purchase = issue_dates < purchase_dates
+                issue_after_from = issue_dates > from_date_obj
+                
+                dead_stock_mask = purchase_in_last_year & (no_issue_mask | issue_before_purchase | issue_after_from)
+                filtered_df = filtered_df[dead_stock_mask]
+                
+            elif to_date:
+                to_date_obj = pd.to_datetime(to_date)
+                last_year_to = to_date_obj - pd.DateOffset(years=1)
+                
+                # Purchase before last year's to date
+                purchase_in_last_year = purchase_dates <= last_year_to
+                
+                # Not issued within the period
+                no_issue_mask = issue_dates.isna()
+                issue_before_purchase = issue_dates < purchase_dates
+                issue_after_to = issue_dates > to_date_obj
+                
+                dead_stock_mask = purchase_in_last_year & (no_issue_mask | issue_before_purchase | issue_after_to)
+                filtered_df = filtered_df[dead_stock_mask]
+            
         except Exception as e:
             print(f"Date filtering error: {e}")
     
