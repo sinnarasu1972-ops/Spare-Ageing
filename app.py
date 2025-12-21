@@ -825,6 +825,87 @@ async def calculate_gndp(
     total_gndp_calc = filtered_df[gndp_column].sum() if gndp_column in filtered_df.columns else 0
     return {"total_gndp": total_gndp_calc}
 
+@app.get("/calculate-date-range-stock")
+async def calculate_date_range_stock(
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    movement_category: Optional[str] = None,
+    part_category: Optional[str] = None,
+    location: Optional[str] = None,
+    abc_category: Optional[str] = None,
+    ris: Optional[str] = None,
+    part_number: Optional[str] = None
+):
+    """Calculate stock value for items purchased within the selected date range"""
+    if df is None:
+        return {"total_stock_value": 0, "count": 0}
+    
+    filtered_df = df.copy()
+    
+    # Apply non-date filters first
+    if movement_category:
+        categories_list = movement_category.split(',')
+        filtered_df = filtered_df[filtered_df['Movement Category P (2)'].isin(categories_list)]
+    
+    if part_category and part_category_col in filtered_df.columns:
+        categories_list = part_category.split(',')
+        filtered_df = filtered_df[filtered_df[part_category_col].isin(categories_list)]
+    
+    if location and location_col in filtered_df.columns:
+        locations_list = location.split(',')
+        filtered_df = filtered_df[filtered_df[location_col].isin(locations_list)]
+    
+    if abc_category and abc_col in filtered_df.columns:
+        categories_list = abc_category.split(',')
+        filtered_df = filtered_df[filtered_df[abc_col].isin(categories_list)]
+    
+    if ris and ris_col in filtered_df.columns:
+        ris_list = ris.split(',')
+        filtered_df = filtered_df[filtered_df[ris_col].isin(ris_list)]
+    
+    if part_number and part_no_col in filtered_df.columns:
+        filtered_df = filtered_df[filtered_df[part_no_col].astype(str).str.contains(part_number, case=False, na=False)]
+    
+    # Apply date range filtering for PURCHASE DATE
+    if (from_date or to_date) and last_purchase_col in filtered_df.columns:
+        try:
+            # Convert purchase dates
+            purchase_dates = pd.to_datetime(filtered_df[last_purchase_col].astype(str).str[:10], errors='coerce')
+            
+            if from_date and to_date:
+                from_date_obj = pd.to_datetime(from_date)
+                to_date_obj = pd.to_datetime(to_date)
+                
+                # Filter: Purchase date should be within the selected range
+                purchase_in_range = (purchase_dates >= from_date_obj) & (purchase_dates <= to_date_obj)
+                filtered_df = filtered_df[purchase_in_range]
+                
+                print(f"Date range filter applied:")
+                print(f"  - Selected range: {from_date_obj.date()} to {to_date_obj.date()}")
+                print(f"  - Found {len(filtered_df)} parts purchased in this range")
+            
+            elif from_date:
+                from_date_obj = pd.to_datetime(from_date)
+                purchase_in_range = purchase_dates >= from_date_obj
+                filtered_df = filtered_df[purchase_in_range]
+            
+            elif to_date:
+                to_date_obj = pd.to_datetime(to_date)
+                purchase_in_range = purchase_dates <= to_date_obj
+                filtered_df = filtered_df[purchase_in_range]
+            
+        except Exception as e:
+            print(f"Date filtering error: {e}")
+    
+    # Calculate total stock value
+    total_stock_value = filtered_df[gndp_column].sum() if gndp_column in filtered_df.columns else 0
+    
+    return {
+        "total_stock_value": total_stock_value,
+        "count": len(filtered_df),
+        "date_range": f"{from_date} to {to_date}" if from_date and to_date else "No date range"
+    }
+
 @app.get("/data")
 async def get_data(
     page: int = 1,
