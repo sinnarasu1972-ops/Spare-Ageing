@@ -769,14 +769,19 @@
             
             // Only calculate if dates are selected
             if (filters.fromDate || filters.toDate) {
-                const queryString = buildQueryString(filters);
+                // Build query string without dates for dead stock
+                const queryStringNoDate = buildQueryStringNoDate(filters);
                 
-                // Get total stock value for date range
+                // Build query string with dates for regular stock
+                const queryStringWithDate = buildQueryString(filters);
+                
+                // Get stock value for items purchased in date range
                 $.ajax({
-                    url: `/calculate-gndp?${queryString}`,
+                    url: `/calculate-date-range-stock?${queryStringWithDate}`,
                     method: 'GET',
                     success: function(response) {
-                        $('#dateRangeStockValue').text(formatIndianNumber(response.total_gndp));
+                        $('#dateRangeStockValue').text(formatIndianNumber(response.total_stock_value));
+                        console.log(`📅 Date Range Stock: ${response.count} parts, Value: ${formatIndianNumber(response.total_stock_value)}`);
                     },
                     error: function(error) {
                         console.error('Error calculating date range stock:', error);
@@ -786,7 +791,7 @@
                 
                 // Get dead stock value for date range
                 $.ajax({
-                    url: `/dead-stock-summary?${queryString}`,
+                    url: `/dead-stock-summary?${queryStringWithDate}`,
                     method: 'GET',
                     success: function(response) {
                         // Sum all dead stock values
@@ -797,6 +802,7 @@
                             (response.last_to_last_month?.value || 0);
                         
                         $('#dateRangeDeadStockValue').text(formatIndianNumber(totalDeadStockValue));
+                        console.log(`💀 Dead Stock Value: ${formatIndianNumber(totalDeadStockValue)}`);
                     },
                     error: function(error) {
                         console.error('Error calculating dead stock value:', error);
