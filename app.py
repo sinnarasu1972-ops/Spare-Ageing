@@ -906,6 +906,105 @@ async def calculate_date_range_stock(
         "date_range": f"{from_date} to {to_date}" if from_date and to_date else "No date range"
     }
 
+@app.get("/calculate-date-range-dead-stock")
+async def calculate_date_range_dead_stock(
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    movement_category: Optional[str] = None,
+    part_category: Optional[str] = None,
+    location: Optional[str] = None,
+    abc_category: Optional[str] = None,
+    ris: Optional[str] = None,
+    part_number: Optional[str] = None
+):
+    """
+    Calculate dead stock value for parts purchased in LAST YEAR's date range 
+    that were NOT SOLD by the selected TO DATE
+    """
+    if df is None:
+        return {"total_dead_stock_value": 0, "count": 0}
+    
+    if not from_date or not to_date:
+        return {"total_dead_stock_value": 0, "count": 0, "message": "Both from_date and to_date are required"}
+    
+    filtered_df = df.copy()
+    
+    # Apply non-date filters first
+    if movement_category:
+        categories_list = movement_category.split(',')
+        filtered_df = filtered_df[filtered_df['Movement Category P (2)'].isin(categories_list)]
+    
+    if part_category and part_category_col in filtered_df.columns:
+        categories_list = part_category.split(',')
+        filtered_df = filtered_df[filtered_df[part_category_col].isin(categories_list)]
+    
+    if location and location_col in filtered_df.columns:
+        locations_list = location.split(',')
+        filtered_df = filtered_df[filtered_df[location_col].isin(locations_list)]
+    
+    if abc_category and abc_col in filtered_df.columns:
+        categories_list = abc_category.split(',')
+        filtered_df = filtered_df[filtered_df[abc_col].isin(categories_list)]
+    
+    if ris and ris_col in filtered_df.columns:
+        ris_list = ris.split(',')
+        filtered_df = filtered_df[filtered_df[ris_col].isin(ris_list)]
+    
+    if part_number and part_no_col in filtered_df.columns:
+        filtered_df = filtered_df[filtered_df[part_no_col].astype(str).str.contains(part_number, case=False, na=False)]
+    
+    # Dead Stock Logic:
+    # 1. Parts purchased in LAST YEAR during the selected period
+    # 2. That were NOT SOLD by the TO DATE
+    try:
+        from_date_obj = pd.to_datetime(from_date)
+        to_date_obj = pd.to_datetime(to_date)
+        
+        # Calculate LAST YEAR's date range
+        last_year_from = from_date_obj - pd.DateOffset(years=1)
+        last_year_to = to_date_obj - pd.DateOffset(years=1)
+        
+        # Convert dates
+        purchase_dates = pd.to_datetime(filtered_df[last_purchase_col].astype(str).str[:10], errors='coerce')
+        issue_dates = pd.to_datetime(filtered_df[last_issue_col].astype(str).str[:10], errors='coerce')
+        
+        # Filter: Purchase date should be in LAST YEAR's date range
+        purchase_in_last_year_range = (purchase_dates >= last_year_from) & (purchase_dates <= last_year_to)
+        
+        # Dead stock: NOT SOLD by the TO DATE
+        # Either: No issue date at all, OR issue date is after the TO DATE, OR issue before purchase (invalid)
+        no_issue_mask = issue_dates.isna()
+        issue_after_to_date = issue_dates > to_date_obj
+        issue_before_purchase = issue_dates < purchase_dates
+        
+        not_sold_mask = no_issue_mask | issue_after_to_date | issue_before_purchase
+        
+        # Combine: Purchased in last year range AND not sold by to_date
+        dead_stock_mask = purchase_in_last_year_range & not_sold_mask
+        
+        dead_stock_df = filtered_df[dead_stock_mask]
+        
+        # Calculate total value
+        total_dead_stock_value = dead_stock_df[gndp_column].sum() if gndp_column in dead_stock_df.columns else 0
+        
+        print(f"Dead Stock Date Range Calculation:")
+        print(f"  - Selected range: {from_date_obj.date()} to {to_date_obj.date()}")
+        print(f"  - Purchase range (last year): {last_year_from.date()} to {last_year_to.date()}")
+        print(f"  - Not sold by: {to_date_obj.date()}")
+        print(f"  - Found {len(dead_stock_df)} dead stock parts")
+        print(f"  - Total value: {total_dead_stock_value}")
+        
+        return {
+            "total_dead_stock_value": total_dead_stock_value,
+            "count": len(dead_stock_df),
+            "purchase_range": f"{last_year_from.date()} to {last_year_to.date()}",
+            "not_sold_by": str(to_date_obj.date())
+        }
+        
+    except Exception as e:
+        print(f"Error calculating date range dead stock: {e}")
+        return {"total_dead_stock_value": 0, "count": 0, "error": str(e)}
+
 @app.get("/data")
 async def get_data(
     page: int = 1,
