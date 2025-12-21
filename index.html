@@ -431,7 +431,7 @@
                         </label>
                         <input type="date" class="form-control" id="fromDate" />
                     </div>
-                    <div class="col-md-3">
+                    <div class="col-md-2">
                         <label for="toDate">
                             <i class="bi bi-calendar-check"></i> To Date
                         </label>
@@ -446,7 +446,7 @@
                     <!-- NEW CARDS FOR DATE RANGE VALUES -->
                     <div class="col-md-2">
                         <div class="date-range-value-card stock-value">
-                            <small>📅 Current Year Stock</small>
+                            <small>📅 Stock Up to Date</small>
                             <div class="value" id="dateRangeStockValue">0</div>
                         </div>
                     </div>
@@ -456,11 +456,17 @@
                             <div class="value" id="dateRangeDeadStockValue">0</div>
                         </div>
                     </div>
+                    <div class="col-md-1 d-flex align-items-end">
+                        <button class="btn btn-success w-100" id="exportDateRangeExcel" title="Export to Excel">
+                            <i class="bi bi-file-earmark-excel"></i>
+                        </button>
+                    </div>
                 </div>
                 <small class="text-white mt-2 d-block">
                     <i class="bi bi-info-circle"></i> <strong>Date Range Cards:</strong> 
-                    📅 Shows stock purchased in selected period | 
-                    💀 Shows parts purchased LAST YEAR (same period) that are still unsold
+                    📅 Stock purchased up to TO DATE | 
+                    💀 Parts purchased LAST YEAR (same period) that are still unsold |
+                    <i class="bi bi-file-earmark-excel"></i> Excel: Both sheets in one file
                 </small>
             </div>
         </div>
@@ -769,8 +775,8 @@
         function updateDateRangeValues() {
             const filters = getFilters();
             
-            // Only calculate if dates are selected
-            if (filters.fromDate && filters.toDate) {
+            // Only calculate if TO DATE is selected (FROM DATE is optional)
+            if (filters.toDate) {
                 // Build query string without dates for general filters
                 const params = new URLSearchParams();
                 if (filters.movementCategory.length) params.append('movement_category', filters.movementCategory.join(','));
@@ -780,42 +786,59 @@
                 if (filters.ris.length) params.append('ris', filters.ris.join(','));
                 if (filters.partNumber) params.append('part_number', filters.partNumber);
                 
-                // Add dates for both endpoints
-                params.append('from_date', filters.fromDate);
+                // Add ONLY TO DATE for first card (cumulative up to date)
                 params.append('to_date', filters.toDate);
                 
-                const queryStringWithDate = params.toString();
+                const queryStringUpToDate = params.toString();
                 
-                // Get stock value for items purchased in date range (current year)
+                // Get stock value for items purchased UP TO TO DATE (cumulative)
                 $.ajax({
-                    url: `/calculate-date-range-stock?${queryStringWithDate}`,
+                    url: `/calculate-stock-upto-date?${queryStringUpToDate}`,
                     method: 'GET',
                     success: function(response) {
                         $('#dateRangeStockValue').text(formatIndianNumber(response.total_stock_value));
-                        console.log(`📅 Date Range Stock (${filters.fromDate} to ${filters.toDate}): ${response.count} parts, Value: ${formatIndianNumber(response.total_stock_value)}`);
+                        console.log(`📅 Stock Up To ${filters.toDate}: ${response.count} parts, Value: ${formatIndianNumber(response.total_stock_value)}`);
                     },
                     error: function(error) {
-                        console.error('Error calculating date range stock:', error);
+                        console.error('Error calculating stock up to date:', error);
                         $('#dateRangeStockValue').text('0');
                     }
                 });
                 
-                // Get dead stock value for parts purchased LAST YEAR, not sold by TO DATE
-                $.ajax({
-                    url: `/calculate-date-range-dead-stock?${queryStringWithDate}`,
-                    method: 'GET',
-                    success: function(response) {
-                        $('#dateRangeDeadStockValue').text(formatIndianNumber(response.total_dead_stock_value));
-                        console.log(`💀 Dead Stock: Parts purchased ${response.purchase_range}, not sold by ${response.not_sold_by}`);
-                        console.log(`💀 Dead Stock Count: ${response.count}, Value: ${formatIndianNumber(response.total_dead_stock_value)}`);
-                    },
-                    error: function(error) {
-                        console.error('Error calculating dead stock value:', error);
-                        $('#dateRangeDeadStockValue').text('0');
-                    }
-                });
+                // Get dead stock value only if both FROM and TO dates are selected
+                if (filters.fromDate && filters.toDate) {
+                    const paramsWithBothDates = new URLSearchParams();
+                    if (filters.movementCategory.length) paramsWithBothDates.append('movement_category', filters.movementCategory.join(','));
+                    if (filters.partCategory.length) paramsWithBothDates.append('part_category', filters.partCategory.join(','));
+                    if (filters.location.length) paramsWithBothDates.append('location', filters.location.join(','));
+                    if (filters.abcCategory.length) paramsWithBothDates.append('abc_category', filters.abcCategory.join(','));
+                    if (filters.ris.length) paramsWithBothDates.append('ris', filters.ris.join(','));
+                    if (filters.partNumber) paramsWithBothDates.append('part_number', filters.partNumber);
+                    paramsWithBothDates.append('from_date', filters.fromDate);
+                    paramsWithBothDates.append('to_date', filters.toDate);
+                    
+                    const queryStringBothDates = paramsWithBothDates.toString();
+                    
+                    // Get dead stock value for parts purchased LAST YEAR, not sold by TO DATE
+                    $.ajax({
+                        url: `/calculate-date-range-dead-stock?${queryStringBothDates}`,
+                        method: 'GET',
+                        success: function(response) {
+                            $('#dateRangeDeadStockValue').text(formatIndianNumber(response.total_dead_stock_value));
+                            console.log(`💀 Dead Stock: Parts purchased ${response.purchase_range}, not sold by ${response.not_sold_by}`);
+                            console.log(`💀 Dead Stock Count: ${response.count}, Value: ${formatIndianNumber(response.total_dead_stock_value)}`);
+                        },
+                        error: function(error) {
+                            console.error('Error calculating dead stock value:', error);
+                            $('#dateRangeDeadStockValue').text('0');
+                        }
+                    });
+                } else {
+                    // If no FROM date, reset dead stock to 0
+                    $('#dateRangeDeadStockValue').text('0');
+                }
             } else {
-                // Reset to 0 if dates not fully selected
+                // Reset to 0 if TO DATE not selected
                 $('#dateRangeStockValue').text('0');
                 $('#dateRangeDeadStockValue').text('0');
             }
@@ -1170,6 +1193,29 @@
                 const filters = getFilters();
                 const queryString = buildQueryStringNoDate(filters);
                 window.location.href = `/download-last-month-liquidation-csv?${queryString}`;
+            });
+            
+            // NEW: Excel export for date range (2 sheets)
+            $('#exportDateRangeExcel').click(function() {
+                const filters = getFilters();
+                
+                if (!filters.toDate) {
+                    alert('Please select TO DATE to export Excel file');
+                    return;
+                }
+                
+                const params = new URLSearchParams();
+                if (filters.movementCategory.length) params.append('movement_category', filters.movementCategory.join(','));
+                if (filters.partCategory.length) params.append('part_category', filters.partCategory.join(','));
+                if (filters.location.length) params.append('location', filters.location.join(','));
+                if (filters.abcCategory.length) params.append('abc_category', filters.abcCategory.join(','));
+                if (filters.ris.length) params.append('ris', filters.ris.join(','));
+                if (filters.partNumber) params.append('part_number', filters.partNumber);
+                if (filters.fromDate) params.append('from_date', filters.fromDate);
+                params.append('to_date', filters.toDate);
+                
+                const queryString = params.toString();
+                window.location.href = `/download-date-range-excel?${queryString}`;
             });
         }
     </script>
