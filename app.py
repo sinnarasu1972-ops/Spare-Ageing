@@ -1028,15 +1028,15 @@ async def calculate_remaining_dead_stock(
         
         unsold_df = filtered_df[not_sold]
         
-        # Filter: Parts with no activity/movement within the date range
-        # This means: Last Issue Date is before From Date OR Last Issue Date is NULL
+        # Filter: Parts with no activity within the date range
+        # This includes: Parts never issued (NULL) OR Parts with last issue before the range
         if from_date and to_date:
             from_date_obj = pd.to_datetime(from_date)
             
-            # Parts that haven't been issued/moved since before the date range
             try:
                 issue_dates_unsold = pd.to_datetime(unsold_df[last_issue_col].astype(str).str[:10], errors='coerce')
-                no_activity_in_range = issue_dates_unsold < from_date_obj
+                # Non-moving = Never issued (NULL) OR issued before the date range
+                no_activity_in_range = (issue_dates_unsold.isna()) | (issue_dates_unsold < from_date_obj)
             except:
                 # If Last Issue Date is NULL, it's definitely not active
                 no_activity_in_range = unsold_df[last_issue_col].isna() | (unsold_df[last_issue_col].astype(str).str.strip() == '')
