@@ -228,6 +228,52 @@
             font-size: clamp(0.85rem, 2.5vw, 1rem);
         }
 
+        /* Enhanced Part Category Table Styles */
+        #partCategoryTable {
+            position: relative;
+        }
+
+        #partCategoryTable thead th:first-child {
+            position: sticky;
+            left: 0;
+            background-color: #1e293b !important;
+            z-index: 25;
+            box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+        }
+
+        #partCategoryTable tbody td:first-child {
+            position: sticky;
+            left: 0;
+            background-color: white;
+            z-index: 5;
+            font-weight: 600;
+            box-shadow: 2px 0 5px rgba(0,0,0,0.05);
+        }
+
+        #partCategoryTable tfoot td:first-child {
+            position: sticky;
+            left: 0;
+            background-color: #ff6f00 !important;
+            z-index: 15;
+            box-shadow: 2px 0 5px rgba(0,0,0,0.2);
+        }
+
+        /* Make the grand total column stand out */
+        #partCategoryTable thead th:last-child {
+            background-color: #ffc107 !important;
+            color: #000 !important;
+        }
+
+        #partCategoryTable tbody td:last-child {
+            background-color: #fff3cd !important;
+            font-weight: bold;
+        }
+
+        #partCategoryTable tfoot td:last-child {
+            background-color: #ff9800 !important;
+            font-size: 1.2em;
+        }
+
         /* Mobile adjustments */
         @media (max-width: 576px) {
             .container-fluid {
@@ -309,6 +355,16 @@
             .card-body {
                 padding: 10px;
             }
+        }
+
+        /* Highlight for column totals */
+        .column-total-highlight {
+            animation: pulse 2s ease-in-out;
+        }
+
+        @keyframes pulse {
+            0%, 100% { background-color: #ff6f00; }
+            50% { background-color: #ff9800; }
         }
     </style>
 </head>
@@ -507,19 +563,25 @@
             </div>
         </div>
         
-        <!-- LOCATION WISE PART CATEGORY TABLE -->
+        <!-- LOCATION WISE PART CATEGORY TABLE - ENHANCED -->
         <div class="card mt-3">
             <div class="card-body">
                 <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
-                    <h5 class="mb-0">Part Category Breakdown</h5>
+                    <h5 class="mb-0">📊 Part Category Breakdown (All Column Totals)</h5>
                     <button id="downloadPartCategoryCsv" class="btn btn-info btn-sm">
                         <i class="bi bi-download"></i> Download
                     </button>
                 </div>
-                <div class="alert alert-warning py-2 mb-2" style="font-size: 0.85em;">
-                    <i class="bi bi-info-circle"></i> <strong>Scroll down ↓</strong> to view <strong>Column Totals</strong> (orange footer row at bottom)
+                <div class="alert alert-info py-2 mb-2" style="font-size: 0.85em;">
+                    <i class="bi bi-info-circle-fill"></i> <strong>Instructions:</strong>
+                    <ul class="mb-0 mt-1" style="font-size: 0.9em;">
+                        <li><strong>Scroll horizontally →</strong> to see ALL part categories</li>
+                        <li><strong>Scroll down ↓</strong> to view <strong style="color: #ff6f00;">COLUMN TOTALS</strong> (orange footer row)</li>
+                        <li><strong>Location column is sticky</strong> - stays visible when scrolling</li>
+                        <li><strong>Last column shows Row Totals</strong> for each location</li>
+                    </ul>
                 </div>
-                <div class="table-responsive" style="max-height: 500px; overflow: auto; border: 2px solid #ddd;">
+                <div class="table-responsive" style="max-height: 600px; overflow: auto; border: 3px solid #2563eb; border-radius: 8px;">
                     <table class="table table-striped table-hover table-sm table-bordered mb-0" id="partCategoryTable">
                         <thead class="table-dark" style="position: sticky; top: 0; z-index: 20;">
                             <tr id="partCategoryHeaders">
@@ -528,10 +590,13 @@
                             </tr>
                         </thead>
                         <tbody></tbody>
-                        <tfoot style="background-color: #ff6f00; color: white; font-weight: bold; position: sticky; bottom: 0; z-index: 15;">
+                        <tfoot class="column-total-highlight" style="background-color: #ff6f00; color: white; font-weight: bold; position: sticky; bottom: 0; z-index: 15; box-shadow: 0 -4px 10px rgba(0,0,0,0.3);">
                             <tr id="partCategoryTotal"></tr>
                         </tfoot>
                     </table>
+                </div>
+                <div class="alert alert-warning mt-2 py-2" style="font-size: 0.85em;">
+                    <i class="bi bi-lightbulb-fill"></i> <strong>Total Parts Found:</strong> <span id="totalPartCategoriesCount" class="fw-bold">0</span> categories
                 </div>
             </div>
         </div>
@@ -578,8 +643,6 @@
         
         $(document).ready(function() {
             $('.selectpicker').selectpicker();
-            
-            // Don't set default dates - let user choose when to apply date range
             
             setupEventListeners();
             
@@ -646,13 +709,13 @@
             loadSummary();
             loadPartCategorySummary();
             loadDeadStockSummary();
-            updateGNDP();  // Update Total GNDP with filtered value
+            updateGNDP();
         }
         
         // Dead Stock Summary - NOT affected by date range
         function loadDeadStockSummary() {
             const filters = getFilters();
-            const queryString = buildQueryStringNoDate(filters);  // No dates!
+            const queryString = buildQueryStringNoDate(filters);
             
             $.ajax({
                 url: `/dead-stock-summary?${queryString}`,
@@ -672,6 +735,9 @@
                         $('#lastMonthLiquidationCount').text(response.last_month_liquidation.count);
                         $('#lastMonthLiquidationValue').text(formatIndianNumber(response.last_month_liquidation.value));
                     }
+                },
+                error: function(error) {
+                    console.error('Error loading dead stock summary:', error);
                 }
             });
         }
@@ -679,7 +745,7 @@
         // Summary - Affected by date range
         function loadSummary() {
             const filters = getFilters();
-            const queryString = buildQueryString(filters);  // Includes dates!
+            const queryString = buildQueryString(filters);
             
             $.ajax({
                 url: `/summary?${queryString}`,
@@ -689,7 +755,6 @@
                     $('#summaryTable tfoot').empty();
                     
                     response.summary.forEach(row => {
-                        // Calculate row total (sum of all value columns)
                         const rowTotal = row.aging_0_90_value + row.aging_91_180_value + 
                                        row.aging_181_365_value + row.aging_366_730_value + 
                                        row.aging_730_plus_value;
@@ -713,7 +778,6 @@
                     });
                     
                     const total = response.total;
-                    // Calculate grand total (sum of all value columns in total row)
                     const grandTotal = total.aging_0_90_value + total.aging_91_180_value + 
                                      total.aging_181_365_value + total.aging_366_730_value + 
                                      total.aging_730_plus_value;
@@ -734,50 +798,90 @@
                             <td class="text-end" style="background-color: #FFD54F;">${formatIndianNumber(grandTotal)}</td>
                         </tr>
                     `);
+                },
+                error: function(error) {
+                    console.error('Error loading summary:', error);
                 }
             });
         }
         
-        // Part Category Summary - Affected by date range
+        // ENHANCED Part Category Summary - Shows ALL Column Totals
         function loadPartCategorySummary() {
             const filters = getFilters();
-            const queryString = buildQueryString(filters);  // Includes dates!
+            const queryString = buildQueryString(filters);
+            
+            console.log('🔍 Loading Part Category Summary...');
             
             $.ajax({
                 url: `/location-part-category-summary?${queryString}`,
                 method: 'GET',
                 success: function(response) {
+                    console.log('✅ Part Category Data Received:', response);
+                    
                     const partCategories = response.part_categories;
-                    let headerHtml = '<th>Location</th>';
-                    partCategories.forEach(cat => {
-                        headerHtml += `<th>${cat}</th>`;
+                    console.log('📊 Total Part Categories Found:', partCategories.length);
+                    console.log('📋 Part Categories:', partCategories);
+                    
+                    // Update category count
+                    $('#totalPartCategoriesCount').text(partCategories.length);
+                    
+                    // Build header with sticky Location column
+                    let headerHtml = '<th style="position: sticky; left: 0; background-color: #1e293b !important; z-index: 25; box-shadow: 2px 0 5px rgba(0,0,0,0.1);">Location</th>';
+                    
+                    // Add all part category columns
+                    partCategories.forEach((cat, index) => {
+                        console.log(`Column ${index + 1}: ${cat}`);
+                        headerHtml += `<th class="text-center" style="min-width: 100px;">${cat}</th>`;
                     });
-                    headerHtml += '<th style="background-color: #ffc107; color: #000;">Total</th>';
+                    
+                    // Add Row Total column
+                    headerHtml += '<th class="text-center" style="background-color: #ffc107; color: #000; min-width: 120px;">Row Total</th>';
                     $('#partCategoryHeaders').html(headerHtml);
                     
+                    // Build body rows
                     $('#partCategoryTable tbody').empty();
-                    response.summary.forEach(row => {
-                        let rowHtml = `<tr><td class="fw-bold">${row.location}</td>`;
+                    response.summary.forEach((row, rowIndex) => {
+                        let rowHtml = `<tr><td class="fw-bold" style="position: sticky; left: 0; background-color: white; z-index: 5; box-shadow: 2px 0 5px rgba(0,0,0,0.05);">${row.location}</td>`;
                         let rowTotal = 0;
+                        
                         partCategories.forEach(cat => {
                             const value = row[cat] || 0;
                             rowHtml += `<td class="text-end">${formatIndianNumber(value)}</td>`;
                             rowTotal += value;
                         });
+                        
                         rowHtml += `<td class="text-end fw-bold" style="background-color: #fff3cd; color: #000;">${formatIndianNumber(rowTotal)}</td></tr>`;
                         $('#partCategoryTable tbody').append(rowHtml);
+                        console.log(`Row ${rowIndex + 1} (${row.location}): Total = ${formatIndianNumber(rowTotal)}`);
                     });
                     
-                    let footerHtml = '<tr style="background-color: #ff6f00; color: white; font-size: 1.1em; position: sticky; bottom: 0; z-index: 10; box-shadow: 0 -2px 10px rgba(0,0,0,0.3);">';
-                    footerHtml += '<td class="fw-bold" style="color: white; padding: 12px;">COLUMN TOTAL</td>';
+                    // Build COLUMN TOTALS footer row
+                    console.log('🧮 Calculating Column Totals...');
+                    let footerHtml = '<tr style="background-color: #ff6f00; color: white; font-size: 1.15em; font-weight: bold;">';
+                    footerHtml += '<td style="position: sticky; left: 0; background-color: #ff6f00 !important; z-index: 15; box-shadow: 2px 0 5px rgba(0,0,0,0.2); padding: 14px; font-size: 1.1em;">📊 COLUMN TOTAL</td>';
+                    
                     let grandTotal = 0;
-                    partCategories.forEach(cat => {
-                        const total = response.total[cat] || 0;
-                        footerHtml += `<td class="fw-bold text-end" style="color: white; padding: 12px;">${formatIndianNumber(total)}</td>`;
-                        grandTotal += total;
+                    
+                    // Calculate and display total for EACH part category
+                    partCategories.forEach((cat, index) => {
+                        const columnTotal = response.total[cat] || 0;
+                        console.log(`✅ ${cat}: ${formatIndianNumber(columnTotal)}`);
+                        footerHtml += `<td class="text-end" style="padding: 14px; background-color: #ff6f00; color: white; font-weight: bold; border-left: 1px solid rgba(255,255,255,0.2);">${formatIndianNumber(columnTotal)}</td>`;
+                        grandTotal += columnTotal;
                     });
-                    footerHtml += `<td class="fw-bold text-end" style="background-color: #ff9800; color: white; padding: 12px; font-size: 1.2em;">${formatIndianNumber(grandTotal)}</td></tr>`;
+                    
+                    // Add grand total (sum of all columns)
+                    console.log(`🎯 GRAND TOTAL: ${formatIndianNumber(grandTotal)}`);
+                    footerHtml += `<td class="text-end" style="background-color: #ff9800; color: white; padding: 14px; font-size: 1.3em; font-weight: bold; border: 2px solid white;">${formatIndianNumber(grandTotal)}</td></tr>`;
+                    
                     $('#partCategoryTable tfoot').html(footerHtml);
+                    
+                    console.log('✅ Part Category Summary Loaded Successfully!');
+                    console.log(`📊 Summary: ${partCategories.length} categories, Grand Total: ${formatIndianNumber(grandTotal)}`);
+                },
+                error: function(error) {
+                    console.error('❌ Error loading part category summary:', error);
+                    alert('Error loading Part Category data. Please check console for details.');
                 }
             });
         }
@@ -785,7 +889,7 @@
         // Data table - Affected by date range
         function loadData() {
             const filters = getFilters();
-            const queryString = buildQueryString(filters);  // Includes dates!
+            const queryString = buildQueryString(filters);
             
             $.ajax({
                 url: `/data?page=${currentPage}&per_page=${perPage}&${queryString}`,
@@ -808,7 +912,9 @@
                     
                     updatePagination(response.total_pages, response.page);
                     $('#recordCount').text(`(${response.total_records} Records)`);
-                    updateGNDP();
+                },
+                error: function(error) {
+                    console.error('Error loading data:', error);
                 }
             });
         }
@@ -821,6 +927,9 @@
                 method: 'GET',
                 success: function(response) {
                     $('#totalGndp').text(formatIndianNumber(response.total_gndp));
+                },
+                error: function(error) {
+                    console.error('Error updating GNDP:', error);
                 }
             });
         }
@@ -869,7 +978,7 @@
                 $('.selectpicker').selectpicker('deselectAll');
                 $('#partNumber').val('');
                 $('#fromDate').val('');
-                $('#toDate').val('');  // Clear to date as well
+                $('#toDate').val('');
                 currentPage = 1;
                 loadAllData();
             });
