@@ -43,6 +43,19 @@ movement_categories = []
 
 # ============= UTILITY FUNCTIONS =============
 
+def format_df_for_export(df_to_export):
+    """Format dataframe for CSV export - fix scientific notation in GNDP column"""
+    export_df = df_to_export.copy()
+    
+    # Fix scientific notation in GNDP column
+    if gndp_column and gndp_column in export_df.columns:
+        # Convert to float and format with 7 decimal places (no scientific notation)
+        export_df[gndp_column] = export_df[gndp_column].apply(
+            lambda x: f"{float(x):.7f}" if pd.notna(x) and x != '' else x
+        )
+    
+    return export_df
+
 def clean_for_json(df):
     """Clean dataframe for JSON serialization"""
     df = df.copy()
@@ -1214,6 +1227,9 @@ async def download_csv(
     
     filtered_df = apply_filters(df.copy(), movement_category, part_category, location, abc_category, ris, part_number, from_date, to_date)
     
+    # Format for export (fix scientific notation)
+    filtered_df = format_df_for_export(filtered_df)
+    
     current_datetime = datetime.now().strftime("%d-%m-%Y_%H-%M-%S")
     locations_filter = location.split(',') if location and location.strip() else []
     location_part = "_".join(locations_filter) if locations_filter else "All_Locations"
@@ -1466,6 +1482,9 @@ async def download_dead_stock_csv(
     if not os.path.exists(reports_dir):
         os.makedirs(reports_dir)
     
+    # Format for export (fix scientific notation)
+    result_df = format_df_for_export(result_df)
+    
     output_path = os.path.join(reports_dir, filename)
     result_df.to_csv(output_path, index=False)
     
@@ -1551,6 +1570,9 @@ async def download_last_month_liquidation_csv(
     reports_dir = "./Reports/Liquidation"
     if not os.path.exists(reports_dir):
         os.makedirs(reports_dir)
+    
+    # Format for export (fix scientific notation)
+    lml_df = format_df_for_export(lml_df)
     
     output_path = os.path.join(reports_dir, filename)
     lml_df.to_csv(output_path, index=False)
