@@ -100,6 +100,50 @@
             font-size: clamp(0.8rem, 2.5vw, 0.9rem);
             padding: 8px 16px;
         }
+
+        /* Date Range Value Cards */
+        .date-range-value-card {
+            background: rgba(255, 255, 255, 0.95);
+            padding: 10px;
+            border-radius: 8px;
+            text-align: center;
+            height: 100%;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            transition: transform 0.2s;
+        }
+
+        .date-range-value-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+        }
+
+        .date-range-value-card small {
+            color: #1e293b;
+            font-weight: 600;
+            display: block;
+            margin-bottom: 5px;
+            font-size: clamp(0.7rem, 2vw, 0.75rem);
+        }
+
+        .date-range-value-card .value {
+            font-size: clamp(1.1rem, 3vw, 1.3rem);
+            font-weight: 700;
+            line-height: 1.2;
+        }
+
+        .date-range-value-card.stock-value .value {
+            color: #2563eb;
+        }
+
+        .date-range-value-card.dead-stock-value .value {
+            color: #ef4444;
+        }
+
+        @media (max-width: 768px) {
+            .date-range-section .row {
+                gap: 8px;
+            }
+        }
         
         .dead-stock-grid {
             display: grid;
@@ -381,26 +425,40 @@
             <!-- DATE RANGE SECTION -->
             <div class="date-range-section">
                 <div class="row g-3">
-                    <div class="col-md-4">
+                    <div class="col-md-3">
                         <label for="fromDate">
                             <i class="bi bi-calendar-event"></i> From Date
                         </label>
                         <input type="date" class="form-control" id="fromDate" />
                     </div>
-                    <div class="col-md-4">
+                    <div class="col-md-3">
                         <label for="toDate">
                             <i class="bi bi-calendar-check"></i> To Date
                         </label>
                         <input type="date" class="form-control" id="toDate" />
                     </div>
-                    <div class="col-md-4 d-flex align-items-end">
+                    <div class="col-md-2 d-flex align-items-end">
                         <button class="btn btn-warning w-100" id="applyDateRange">
-                            <i class="bi bi-funnel-fill"></i> Apply Date Range
+                            <i class="bi bi-funnel-fill"></i> Apply
                         </button>
+                    </div>
+                    
+                    <!-- NEW CARDS FOR DATE RANGE VALUES -->
+                    <div class="col-md-2">
+                        <div class="date-range-value-card stock-value">
+                            <small>📅 Date Range Stock</small>
+                            <div class="value" id="dateRangeStockValue">0</div>
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <div class="date-range-value-card dead-stock-value">
+                            <small>💀 Dead Stock Value</small>
+                            <div class="value" id="dateRangeDeadStockValue">0</div>
+                        </div>
                     </div>
                 </div>
                 <small class="text-white mt-2 d-block">
-                    <i class="bi bi-info-circle"></i> Select dates and click "Apply Date Range" to filter dead stock. Leave empty to show all data.
+                    <i class="bi bi-info-circle"></i> Select dates and click "Apply" to filter data and see stock values.
                 </small>
             </div>
         </div>
@@ -632,6 +690,10 @@
         $(document).ready(function() {
             $('.selectpicker').selectpicker();
             
+            // Initialize date range values
+            $('#dateRangeStockValue').text('0');
+            $('#dateRangeDeadStockValue').text('0');
+            
             setupEventListeners();
             
             setTimeout(() => {
@@ -698,6 +760,54 @@
             loadPartCategorySummary();
             loadDeadStockSummary();
             updateGNDP();
+            updateDateRangeValues();  // Update date range cards
+        }
+        
+        // NEW: Update Date Range Specific Values
+        function updateDateRangeValues() {
+            const filters = getFilters();
+            
+            // Only calculate if dates are selected
+            if (filters.fromDate || filters.toDate) {
+                const queryString = buildQueryString(filters);
+                
+                // Get total stock value for date range
+                $.ajax({
+                    url: `/calculate-gndp?${queryString}`,
+                    method: 'GET',
+                    success: function(response) {
+                        $('#dateRangeStockValue').text(formatIndianNumber(response.total_gndp));
+                    },
+                    error: function(error) {
+                        console.error('Error calculating date range stock:', error);
+                        $('#dateRangeStockValue').text('0');
+                    }
+                });
+                
+                // Get dead stock value for date range
+                $.ajax({
+                    url: `/dead-stock-summary?${queryString}`,
+                    method: 'GET',
+                    success: function(response) {
+                        // Sum all dead stock values
+                        const totalDeadStockValue = 
+                            (response.current_month_as_on_date?.value || 0) +
+                            (response.current_month_complete?.value || 0) +
+                            (response.last_month?.value || 0) +
+                            (response.last_to_last_month?.value || 0);
+                        
+                        $('#dateRangeDeadStockValue').text(formatIndianNumber(totalDeadStockValue));
+                    },
+                    error: function(error) {
+                        console.error('Error calculating dead stock value:', error);
+                        $('#dateRangeDeadStockValue').text('0');
+                    }
+                });
+            } else {
+                // Reset to 0 if no dates selected
+                $('#dateRangeStockValue').text('0');
+                $('#dateRangeDeadStockValue').text('0');
+            }
         }
         
         // Dead Stock Summary - NOT affected by date range
@@ -964,6 +1074,11 @@
                 $('#partNumber').val('');
                 $('#fromDate').val('');
                 $('#toDate').val('');
+                
+                // Reset date range value cards
+                $('#dateRangeStockValue').text('0');
+                $('#dateRangeDeadStockValue').text('0');
+                
                 currentPage = 1;
                 loadAllData();
             });
