@@ -446,19 +446,21 @@
                     <!-- NEW CARDS FOR DATE RANGE VALUES -->
                     <div class="col-md-2">
                         <div class="date-range-value-card stock-value">
-                            <small>📅 Date Range Stock</small>
+                            <small>📅 Current Year Stock</small>
                             <div class="value" id="dateRangeStockValue">0</div>
                         </div>
                     </div>
                     <div class="col-md-2">
                         <div class="date-range-value-card dead-stock-value">
-                            <small>💀 Dead Stock Value</small>
+                            <small>💀 Last Year Unsold</small>
                             <div class="value" id="dateRangeDeadStockValue">0</div>
                         </div>
                     </div>
                 </div>
                 <small class="text-white mt-2 d-block">
-                    <i class="bi bi-info-circle"></i> Select dates and click "Apply" to filter data and see stock values.
+                    <i class="bi bi-info-circle"></i> <strong>Date Range Cards:</strong> 
+                    📅 Shows stock purchased in selected period | 
+                    💀 Shows parts purchased LAST YEAR (same period) that are still unsold
                 </small>
             </div>
         </div>
@@ -768,20 +770,29 @@
             const filters = getFilters();
             
             // Only calculate if dates are selected
-            if (filters.fromDate || filters.toDate) {
-                // Build query string without dates for dead stock
-                const queryStringNoDate = buildQueryStringNoDate(filters);
+            if (filters.fromDate && filters.toDate) {
+                // Build query string without dates for general filters
+                const params = new URLSearchParams();
+                if (filters.movementCategory.length) params.append('movement_category', filters.movementCategory.join(','));
+                if (filters.partCategory.length) params.append('part_category', filters.partCategory.join(','));
+                if (filters.location.length) params.append('location', filters.location.join(','));
+                if (filters.abcCategory.length) params.append('abc_category', filters.abcCategory.join(','));
+                if (filters.ris.length) params.append('ris', filters.ris.join(','));
+                if (filters.partNumber) params.append('part_number', filters.partNumber);
                 
-                // Build query string with dates for regular stock
-                const queryStringWithDate = buildQueryString(filters);
+                // Add dates for both endpoints
+                params.append('from_date', filters.fromDate);
+                params.append('to_date', filters.toDate);
                 
-                // Get stock value for items purchased in date range
+                const queryStringWithDate = params.toString();
+                
+                // Get stock value for items purchased in date range (current year)
                 $.ajax({
                     url: `/calculate-date-range-stock?${queryStringWithDate}`,
                     method: 'GET',
                     success: function(response) {
                         $('#dateRangeStockValue').text(formatIndianNumber(response.total_stock_value));
-                        console.log(`📅 Date Range Stock: ${response.count} parts, Value: ${formatIndianNumber(response.total_stock_value)}`);
+                        console.log(`📅 Date Range Stock (${filters.fromDate} to ${filters.toDate}): ${response.count} parts, Value: ${formatIndianNumber(response.total_stock_value)}`);
                     },
                     error: function(error) {
                         console.error('Error calculating date range stock:', error);
@@ -789,20 +800,14 @@
                     }
                 });
                 
-                // Get dead stock value for date range
+                // Get dead stock value for parts purchased LAST YEAR, not sold by TO DATE
                 $.ajax({
-                    url: `/dead-stock-summary?${queryStringWithDate}`,
+                    url: `/calculate-date-range-dead-stock?${queryStringWithDate}`,
                     method: 'GET',
                     success: function(response) {
-                        // Sum all dead stock values
-                        const totalDeadStockValue = 
-                            (response.current_month_as_on_date?.value || 0) +
-                            (response.current_month_complete?.value || 0) +
-                            (response.last_month?.value || 0) +
-                            (response.last_to_last_month?.value || 0);
-                        
-                        $('#dateRangeDeadStockValue').text(formatIndianNumber(totalDeadStockValue));
-                        console.log(`💀 Dead Stock Value: ${formatIndianNumber(totalDeadStockValue)}`);
+                        $('#dateRangeDeadStockValue').text(formatIndianNumber(response.total_dead_stock_value));
+                        console.log(`💀 Dead Stock: Parts purchased ${response.purchase_range}, not sold by ${response.not_sold_by}`);
+                        console.log(`💀 Dead Stock Count: ${response.count}, Value: ${formatIndianNumber(response.total_dead_stock_value)}`);
                     },
                     error: function(error) {
                         console.error('Error calculating dead stock value:', error);
@@ -810,7 +815,7 @@
                     }
                 });
             } else {
-                // Reset to 0 if no dates selected
+                // Reset to 0 if dates not fully selected
                 $('#dateRangeStockValue').text('0');
                 $('#dateRangeDeadStockValue').text('0');
             }
@@ -1021,8 +1026,22 @@
         }
         
         function updateGNDP() {
+            // Total Stock at GNDP should NEVER be affected by date filters
+            // Only apply non-date filters
             const filters = getFilters();
-            const queryString = buildQueryString(filters);
+            const params = new URLSearchParams();
+            
+            // Add only non-date filters
+            if (filters.movementCategory.length) params.append('movement_category', filters.movementCategory.join(','));
+            if (filters.partCategory.length) params.append('part_category', filters.partCategory.join(','));
+            if (filters.location.length) params.append('location', filters.location.join(','));
+            if (filters.abcCategory.length) params.append('abc_category', filters.abcCategory.join(','));
+            if (filters.ris.length) params.append('ris', filters.ris.join(','));
+            if (filters.partNumber) params.append('part_number', filters.partNumber);
+            // NOTE: We deliberately do NOT include from_date and to_date here
+            
+            const queryString = params.toString();
+            
             $.ajax({
                 url: `/calculate-gndp?${queryString}`,
                 method: 'GET',
