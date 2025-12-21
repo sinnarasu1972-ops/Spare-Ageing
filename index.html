@@ -437,28 +437,28 @@
                     <!-- NEW CARDS FOR DATE RANGE VALUES -->
                     <div class="col-md-2">
                         <div class="date-range-value-card stock-value">
-                            <small>📅 Stock Up to Date</small>
+                            <small>📊 Total Dead Stock</small>
                             <div class="value" id="dateRangeStockValue">0</div>
                         </div>
                     </div>
                     <div class="col-md-2">
                         <div class="date-range-value-card dead-stock-value">
-                            <small>🚫 Non-Moving in Range</small>
+                            <small>🚫 Dead Stock Within Date Range</small>
                             <div class="value" id="dateRangeNonMovingValue">0</div>
                         </div>
                     </div>
                     <div class="col-md-2">
                         <div class="date-range-value-card dead-stock-value">
-                            <small>📦 Remaining Dead Stock</small>
+                            <small>⏳ Pending Dead Stock Within Date Range</small>
                             <div class="value" id="dateRangeRemainingDeadStockValue">0</div>
                         </div>
                     </div>
                 </div>
                 <small class="text-white mt-2 d-block">
                     <i class="bi bi-info-circle"></i> <strong>Date Range Cards:</strong> 
-                    📅 Stock up to TO DATE | 
-                    🚫 Non-moving parts bought in date range but NOT sold |
-                    📦 All remaining dead stock still in warehouse
+                    📊 Total Dead Stock (All unsold in warehouse) | 
+                    🚫 Dead Stock Within Date Range (Bought in range, not sold) |
+                    ⏳ Pending Dead Stock Within Date Range (Other unsold within range)
                 </small>
             </div>
         </div>
@@ -780,14 +780,14 @@
                     method: 'GET',
                     success: function(response) {
                         $('#dateRangeStockValue').text(formatIndianNumber(response.total_stock_value));
-                        console.log(`📅 Stock Up To ${filters.toDate}: Value: ${formatIndianNumber(response.total_stock_value)}`);
+                        console.log(`📊 Total Dead Stock: Value: ${formatIndianNumber(response.total_stock_value)}`);
                     },
                     error: function(error) {
-                        console.error('Error calculating stock up to date:', error);
+                        console.error('Error calculating total dead stock:', error);
                     }
                 });
                 
-                // 2️⃣ & 3️⃣ CARDS 2 & 3: Non-moving in date range + Remaining dead stock (Only Location + Part Category)
+                // 2️⃣ & 3️⃣ CARDS 2 & 3: Dead Stock Within Date Range + Pending Dead Stock (Only Location + Part Category)
                 if (filters.fromDate && filters.toDate) {
                     const params2 = new URLSearchParams();
                     if (filters.location.length) params2.append('location', filters.location.join(','));
@@ -800,14 +800,14 @@
                         method: 'GET',
                         success: function(response) {
                             $('#dateRangeNonMovingValue').text(formatIndianNumber(response.total_value));
-                            console.log(`🚫 Non-Moving in Range (${filters.fromDate} to ${filters.toDate}): Value: ${formatIndianNumber(response.total_value)}`);
+                            console.log(`🚫 Dead Stock Within Date Range (${filters.fromDate} to ${filters.toDate}): Value: ${formatIndianNumber(response.total_value)}`);
                         },
                         error: function(error) {
-                            console.error('Error calculating non-moving in range:', error);
+                            console.error('Error calculating dead stock within date range:', error);
                         }
                     });
                     
-                    // Get remaining dead stock (all other unsold) - Only Location + Part Category
+                    // Get pending dead stock within date range
                     const params3 = new URLSearchParams();
                     if (filters.location.length) params3.append('location', filters.location.join(','));
                     if (filters.partCategory.length) params3.append('part_category', filters.partCategory.join(','));
@@ -819,10 +819,10 @@
                         method: 'GET',
                         success: function(response) {
                             $('#dateRangeRemainingDeadStockValue').text(formatIndianNumber(response.total_value));
-                            console.log(`📦 Remaining Dead Stock in Warehouse: Value: ${formatIndianNumber(response.total_value)}`);
+                            console.log(`⏳ Pending Dead Stock Within Date Range: Value: ${formatIndianNumber(response.total_value)}`);
                         },
                         error: function(error) {
-                            console.error('Error calculating remaining dead stock:', error);
+                            console.error('Error calculating pending dead stock:', error);
                         }
                     });
                 }
