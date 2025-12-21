@@ -1364,25 +1364,112 @@ async def download_dead_stock_csv(
     from_date: Optional[str] = None,
     to_date: Optional[str] = None
 ):
-    """Download dead stock data as CSV"""
+    """Download dead stock data as CSV - filtered by specific category"""
     if df is None:
         return {"error": "Data not available"}
     
-    filtered_df = apply_filters(df.copy(), movement_category, part_category, location, abc_category, ris, part_number, from_date, to_date)
-    result_df = filtered_df[filtered_df['Is Dead Stock'] == True]
+    # Apply basic filters (without date range logic)
+    filtered_df = df.copy()
+    
+    if movement_category:
+        categories_list = movement_category.split(',')
+        filtered_df = filtered_df[filtered_df['Movement Category P (2)'].isin(categories_list)]
+    
+    if part_category and part_category_col in filtered_df.columns:
+        categories_list = part_category.split(',')
+        filtered_df = filtered_df[filtered_df[part_category_col].isin(categories_list)]
+    
+    if location and location_col in filtered_df.columns:
+        locations_list = location.split(',')
+        filtered_df = filtered_df[filtered_df[location_col].isin(locations_list)]
+    
+    if abc_category and abc_col in filtered_df.columns:
+        categories_list = abc_category.split(',')
+        filtered_df = filtered_df[filtered_df[abc_col].isin(categories_list)]
+    
+    if ris and ris_col in filtered_df.columns:
+        ris_list = ris.split(',')
+        filtered_df = filtered_df[filtered_df[ris_col].isin(ris_list)]
+    
+    if part_number and part_no_col in filtered_df.columns:
+        filtered_df = filtered_df[filtered_df[part_no_col].astype(str).str.contains(part_number, case=False, na=False)]
+    
+    # Calculate date ranges
+    today = datetime.now().date()
+    current_month_start = today.replace(day=1)
+    last_month_end = current_month_start - timedelta(days=1)
+    last_month_start = last_month_end.replace(day=1)
+    last_to_last_month_end = last_month_start - timedelta(days=1)
+    last_to_last_month_start = last_to_last_month_end.replace(day=1)
+    
+    current_month_last_year_start = current_month_start.replace(year=current_month_start.year - 1)
+    current_month_last_year_end = today.replace(year=today.year - 1)
+    last_month_last_year_start = last_month_start.replace(year=last_month_start.year - 1)
+    last_month_last_year_end = last_month_end.replace(year=last_month_end.year - 1)
+    last_to_last_month_last_year_start = last_to_last_month_start.replace(year=last_to_last_month_start.year - 1)
+    last_to_last_month_last_year_end = last_to_last_month_end.replace(year=last_to_last_month_end.year - 1)
+    
+    def get_dead_stock_mask(df_temp, date_range_start, date_range_end):
+        try:
+            stock_mask = pd.to_numeric(df_temp[stock_qty_col], errors='coerce').fillna(0) > 0
+            purchase_dates = pd.to_datetime(df_temp[last_purchase_col].astype(str).str[:10], errors='coerce')
+            issue_dates = pd.to_datetime(df_temp[last_issue_col].astype(str).str[:10], errors='coerce')
+            
+            date_range_mask = (purchase_dates >= date_range_start) & (purchase_dates <= date_range_end)
+            no_issue_mask = issue_dates.isna() | (issue_dates < purchase_dates)
+            
+            return stock_mask & date_range_mask & no_issue_mask
+        except:
+            return pd.Series([False] * len(df_temp), index=df_temp.index)
+    
+    # Filter based on category
+    if dead_stock_category == "current_month_as_on_date":
+        # Parts purchased in current month LAST YEAR (as on today's date)
+        mask = get_dead_stock_mask(filtered_df, pd.Timestamp(current_month_last_year_start), pd.Timestamp(current_month_last_year_end))
+        result_df = filtered_df[mask]
+        category_name = "CurrentMonth_AsOnDate"
+        
+    elif dead_stock_category == "current_month_complete":
+        # Parts purchased in complete current month LAST YEAR
+        current_month_complete_end = current_month_last_year_start.replace(
+            month=current_month_last_year_start.month + 1 if current_month_last_year_start.month < 12 else 1, 
+            year=current_month_last_year_start.year + (1 if current_month_last_year_start.month == 12 else 0)
+        ) - timedelta(days=1)
+        mask = get_dead_stock_mask(filtered_df, pd.Timestamp(current_month_last_year_start), pd.Timestamp(current_month_complete_end))
+        result_df = filtered_df[mask]
+        category_name = "CurrentMonth_Complete"
+        
+    elif dead_stock_category == "last_month":
+        # Parts purchased in last month LAST YEAR
+        mask = get_dead_stock_mask(filtered_df, pd.Timestamp(last_month_last_year_start), pd.Timestamp(last_month_last_year_end))
+        result_df = filtered_df[mask]
+        category_name = "LastMonth"
+        
+    elif dead_stock_category == "last_to_last_month":
+        # Parts purchased in last to last month LAST YEAR
+        mask = get_dead_stock_mask(filtered_df, pd.Timestamp(last_to_last_month_last_year_start), pd.Timestamp(last_to_last_month_last_year_end))
+        result_df = filtered_df[mask]
+        category_name = "LastToLastMonth"
+        
+    else:  # "all" or any other value
+        # All dead stock
+        result_df = filtered_df[filtered_df['Is Dead Stock'] == True]
+        category_name = "AllDeadStock"
     
     current_datetime = datetime.now().strftime("%d-%m-%Y_%H-%M-%S")
     locations_filter = location.split(',') if location and location.strip() else []
     location_part = "_".join(locations_filter) if locations_filter else "All_Locations"
     location_part = location_part.replace(" ", "_").replace("/", "-").replace("\\", "-")
     
-    filename = f"DeadStock_{location_part}_{current_datetime}.csv"
+    filename = f"DeadStock_{category_name}_{location_part}_{current_datetime}.csv"
     reports_dir = "./Reports/Dead_Stock"
     if not os.path.exists(reports_dir):
         os.makedirs(reports_dir)
     
     output_path = os.path.join(reports_dir, filename)
     result_df.to_csv(output_path, index=False)
+    
+    print(f"✓ Exported {len(result_df)} dead stock records for category: {dead_stock_category}")
     
     return FileResponse(path=output_path, filename=filename, media_type='text/csv')
 
@@ -1397,12 +1484,63 @@ async def download_last_month_liquidation_csv(
     from_date: Optional[str] = None,
     to_date: Optional[str] = None
 ):
-    """Download last month liquidation as CSV"""
+    """Download last month liquidation as CSV - parts that were dead stock but sold last month"""
     if df is None:
         return {"error": "Data not available"}
     
-    filtered_df = apply_filters(df.copy(), movement_category, part_category, location, abc_category, ris, part_number, from_date, to_date)
-    lml_df = filtered_df
+    # Apply basic filters
+    filtered_df = df.copy()
+    
+    if movement_category:
+        categories_list = movement_category.split(',')
+        filtered_df = filtered_df[filtered_df['Movement Category P (2)'].isin(categories_list)]
+    
+    if part_category and part_category_col in filtered_df.columns:
+        categories_list = part_category.split(',')
+        filtered_df = filtered_df[filtered_df[part_category_col].isin(categories_list)]
+    
+    if location and location_col in filtered_df.columns:
+        locations_list = location.split(',')
+        filtered_df = filtered_df[filtered_df[location_col].isin(locations_list)]
+    
+    if abc_category and abc_col in filtered_df.columns:
+        categories_list = abc_category.split(',')
+        filtered_df = filtered_df[filtered_df[abc_col].isin(categories_list)]
+    
+    if ris and ris_col in filtered_df.columns:
+        ris_list = ris.split(',')
+        filtered_df = filtered_df[filtered_df[ris_col].isin(ris_list)]
+    
+    if part_number and part_no_col in filtered_df.columns:
+        filtered_df = filtered_df[filtered_df[part_no_col].astype(str).str.contains(part_number, case=False, na=False)]
+    
+    # Calculate Last Month Liquidation
+    # Parts purchased MORE than 12 months ago (before last month last year)
+    # That were SOLD in the last month (current year)
+    today = datetime.now().date()
+    current_month_start = today.replace(day=1)
+    last_month_end = current_month_start - timedelta(days=1)
+    last_month_start = last_month_end.replace(day=1)
+    
+    last_month_last_year_start = last_month_start.replace(year=last_month_start.year - 1)
+    
+    try:
+        stock_mask = pd.to_numeric(filtered_df[stock_qty_col], errors='coerce').fillna(0) > 0
+        purchase_dates = pd.to_datetime(filtered_df[last_purchase_col].astype(str).str[:10], errors='coerce')
+        issue_dates = pd.to_datetime(filtered_df[last_issue_col].astype(str).str[:10], errors='coerce')
+        
+        # Purchase date should be BEFORE last month last year (i.e., more than 12 months old)
+        old_purchase_mask = purchase_dates < pd.Timestamp(last_month_last_year_start)
+        
+        # Issue date should be in LAST MONTH (current year)
+        last_month_issue_mask = (issue_dates >= pd.Timestamp(last_month_start)) & (issue_dates <= pd.Timestamp(last_month_end))
+        
+        # Combine: Old parts that were sold last month
+        lml_mask = stock_mask & old_purchase_mask & last_month_issue_mask
+        lml_df = filtered_df[lml_mask]
+    except Exception as e:
+        print(f"Error calculating last month liquidation: {e}")
+        lml_df = pd.DataFrame()
     
     current_datetime = datetime.now().strftime("%d-%m-%Y_%H-%M-%S")
     locations_filter = location.split(',') if location and location.strip() else []
@@ -1416,6 +1554,8 @@ async def download_last_month_liquidation_csv(
     
     output_path = os.path.join(reports_dir, filename)
     lml_df.to_csv(output_path, index=False)
+    
+    print(f"✓ Exported {len(lml_df)} last month liquidation records")
     
     return FileResponse(path=output_path, filename=filename, media_type='text/csv')
 
