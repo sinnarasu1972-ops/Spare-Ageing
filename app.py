@@ -817,14 +817,10 @@ async def calculate_gndp(
 @app.get("/calculate-stock-upto-date")
 async def calculate_stock_upto_date(
     to_date: Optional[str] = None,
-    movement_category: Optional[str] = None,
-    part_category: Optional[str] = None,
     location: Optional[str] = None,
-    abc_category: Optional[str] = None,
-    ris: Optional[str] = None,
-    part_number: Optional[str] = None
+    part_category: Optional[str] = None
 ):
-    """Calculate stock value for items purchased UP TO the TO DATE"""
+    """Calculate stock value for items purchased UP TO the TO DATE (Only Location + Part Category filters)"""
     if df is None:
         return {"total_stock_value": 0, "count": 0}
     
@@ -833,28 +829,14 @@ async def calculate_stock_upto_date(
     
     filtered_df = df.copy()
     
-    if movement_category:
-        categories_list = movement_category.split(',')
-        filtered_df = filtered_df[filtered_df['Movement Category P (2)'].isin(categories_list)]
-    
-    if part_category and part_category_col in filtered_df.columns:
-        categories_list = part_category.split(',')
-        filtered_df = filtered_df[filtered_df[part_category_col].isin(categories_list)]
-    
+    # Apply ONLY Location and Part Category filters
     if location and location_col in filtered_df.columns:
         locations_list = location.split(',')
         filtered_df = filtered_df[filtered_df[location_col].isin(locations_list)]
     
-    if abc_category and abc_col in filtered_df.columns:
-        categories_list = abc_category.split(',')
-        filtered_df = filtered_df[filtered_df[abc_col].isin(categories_list)]
-    
-    if ris and ris_col in filtered_df.columns:
-        ris_list = ris.split(',')
-        filtered_df = filtered_df[filtered_df[ris_col].isin(ris_list)]
-    
-    if part_number and part_no_col in filtered_df.columns:
-        filtered_df = filtered_df[filtered_df[part_no_col].astype(str).str.contains(part_number, case=False, na=False)]
+    if part_category and part_category_col in filtered_df.columns:
+        categories_list = part_category.split(',')
+        filtered_df = filtered_df[filtered_df[part_category_col].isin(categories_list)]
     
     try:
         to_date_obj = pd.to_datetime(to_date)
@@ -956,6 +938,104 @@ async def calculate_date_range_dead_stock(
     except Exception as e:
         print(f"Error calculating date range dead stock: {e}")
         return {"total_dead_stock_value": 0, "count": 0, "error": str(e)}
+
+@app.get("/calculate-date-range-non-moving")
+async def calculate_date_range_non_moving(
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    location: Optional[str] = None,
+    part_category: Optional[str] = None
+):
+    """Calculate non-moving parts (dead stock) purchased in the date range but NOT sold (Only Location + Part Category filters)"""
+    if df is None:
+        return {"total_value": 0, "count": 0}
+    
+    if not from_date or not to_date:
+        return {"total_value": 0, "count": 0, "message": "Both from_date and to_date are required"}
+    
+    filtered_df = df.copy()
+    
+    # Apply ONLY Location and Part Category filters
+    if location and location_col in filtered_df.columns:
+        locations_list = location.split(',')
+        filtered_df = filtered_df[filtered_df[location_col].isin(locations_list)]
+    
+    if part_category and part_category_col in filtered_df.columns:
+        categories_list = part_category.split(',')
+        filtered_df = filtered_df[filtered_df[part_category_col].isin(categories_list)]
+    
+    try:
+        from_date_obj = pd.to_datetime(from_date)
+        to_date_obj = pd.to_datetime(to_date)
+        
+        # Parts purchased in from_date to to_date
+        purchase_dates = pd.to_datetime(filtered_df[last_purchase_col].astype(str).str[:10], errors='coerce')
+        in_date_range = (purchase_dates >= from_date_obj) & (purchase_dates <= to_date_obj)
+        
+        # Parts NOT sold (Last Issue Date is NULL or empty)
+        try:
+            issue_dates = pd.to_datetime(filtered_df[last_issue_col].astype(str).str[:10], errors='coerce')
+            not_sold = issue_dates.isnull()
+        except:
+            not_sold = filtered_df[last_issue_col].isna() | (filtered_df[last_issue_col].astype(str).str.strip() == '')
+        
+        # Combine: Purchased in range AND not sold
+        non_moving_df = filtered_df[in_date_range & not_sold]
+        
+        total_value = non_moving_df[gndp_column].sum() if gndp_column in non_moving_df.columns else 0
+        
+        return {
+            "total_value": total_value,
+            "count": len(non_moving_df),
+            "date_range": f"{from_date} to {to_date}"
+        }
+        
+    except Exception as e:
+        print(f"Error calculating non-moving in date range: {e}")
+        return {"total_value": 0, "count": 0, "error": str(e)}
+
+@app.get("/calculate-remaining-dead-stock")
+async def calculate_remaining_dead_stock(
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    location: Optional[str] = None,
+    part_category: Optional[str] = None
+):
+    """Calculate all remaining dead stock (unsold parts) still in warehouse (Only Location + Part Category filters)"""
+    if df is None:
+        return {"total_value": 0, "count": 0}
+    
+    filtered_df = df.copy()
+    
+    # Apply ONLY Location and Part Category filters
+    if location and location_col in filtered_df.columns:
+        locations_list = location.split(',')
+        filtered_df = filtered_df[filtered_df[location_col].isin(locations_list)]
+    
+    if part_category and part_category_col in filtered_df.columns:
+        categories_list = part_category.split(',')
+        filtered_df = filtered_df[filtered_df[part_category_col].isin(categories_list)]
+    
+    try:
+        # All unsold parts (Last Issue Date is NULL/empty)
+        try:
+            issue_dates = pd.to_datetime(filtered_df[last_issue_col].astype(str).str[:10], errors='coerce')
+            not_sold = issue_dates.isnull()
+        except:
+            not_sold = filtered_df[last_issue_col].isna() | (filtered_df[last_issue_col].astype(str).str.strip() == '')
+        
+        dead_stock_df = filtered_df[not_sold]
+        
+        total_value = dead_stock_df[gndp_column].sum() if gndp_column in dead_stock_df.columns else 0
+        
+        return {
+            "total_value": total_value,
+            "count": len(dead_stock_df)
+        }
+        
+    except Exception as e:
+        print(f"Error calculating remaining dead stock: {e}")
+        return {"total_value": 0, "count": 0, "error": str(e)}
 
 @app.get("/location-part-category-summary")
 async def get_location_part_category_summary(
@@ -1467,14 +1547,25 @@ async def download_summary_csv(
         total_row = {
             'Location': 'TOTAL',
             '0-90 Days Count': sum(row['0-90 Days Count'] for row in summary_data),
+            '0-90 Days Value (Rs.)': round(sum(row['0-90 Days Value (Rs.)'] for row in summary_data), 2),
             '91-180 Days Count': sum(row['91-180 Days Count'] for row in summary_data),
+            '91-180 Days Value (Rs.)': round(sum(row['91-180 Days Value (Rs.)'] for row in summary_data), 2),
             '181-365 Days Count': sum(row['181-365 Days Count'] for row in summary_data),
+            '181-365 Days Value (Rs.)': round(sum(row['181-365 Days Value (Rs.)'] for row in summary_data), 2),
             '366-730 Days Count': sum(row['366-730 Days Count'] for row in summary_data),
+            '366-730 Days Value (Rs.)': round(sum(row['366-730 Days Value (Rs.)'] for row in summary_data), 2),
             '730+ Days Count': sum(row['730+ Days Count'] for row in summary_data),
+            '730+ Days Value (Rs.)': round(sum(row['730+ Days Value (Rs.)'] for row in summary_data), 2),
         }
         summary_data.append(total_row)
     
     summary_df = pd.DataFrame(summary_data)
+    
+    # Format value columns to 2 decimal places
+    value_cols = [col for col in summary_df.columns if 'Value' in col]
+    for col in value_cols:
+        summary_df[col] = summary_df[col].apply(lambda x: round(float(x), 2) if pd.notna(x) else 0)
+    
     current_datetime = datetime.now().strftime("%d-%m-%Y_%H-%M-%S")
     locations_filter = location.split(',') if location and location.strip() else []
     location_part = "_".join(locations_filter) if locations_filter else "All_Locations"
