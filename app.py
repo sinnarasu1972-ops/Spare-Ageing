@@ -820,12 +820,9 @@ async def calculate_stock_upto_date(
     location: Optional[str] = None,
     part_category: Optional[str] = None
 ):
-    """Calculate stock value for items purchased UP TO the TO DATE (Only Location + Part Category filters)"""
+    """Calculate Total Dead Stock - All unsold parts in warehouse (Only Location + Part Category filters)"""
     if df is None:
         return {"total_stock_value": 0, "count": 0}
-    
-    if not to_date:
-        return {"total_stock_value": 0, "count": 0, "message": "to_date is required"}
     
     filtered_df = df.copy()
     
@@ -838,20 +835,21 @@ async def calculate_stock_upto_date(
         categories_list = part_category.split(',')
         filtered_df = filtered_df[filtered_df[part_category_col].isin(categories_list)]
     
+    # Get all unsold parts (dead stock)
     try:
-        to_date_obj = pd.to_datetime(to_date)
-        purchase_dates = pd.to_datetime(filtered_df[last_purchase_col].astype(str).str[:10], errors='coerce')
-        purchase_upto_date = purchase_dates <= to_date_obj
-        filtered_df = filtered_df[purchase_upto_date]
-    except Exception as e:
-        print(f"Date filtering error: {e}")
+        issue_dates = pd.to_datetime(filtered_df[last_issue_col].astype(str).str[:10], errors='coerce')
+        not_sold = issue_dates.isnull()
+    except:
+        not_sold = filtered_df[last_issue_col].isna() | (filtered_df[last_issue_col].astype(str).str.strip() == '')
     
-    total_stock_value = filtered_df[gndp_column].sum() if gndp_column in filtered_df.columns else 0
+    dead_stock_df = filtered_df[not_sold]
+    
+    total_stock_value = dead_stock_df[gndp_column].sum() if gndp_column in dead_stock_df.columns else 0
     
     return {
         "total_stock_value": total_stock_value,
-        "count": len(filtered_df),
-        "up_to_date": to_date
+        "count": len(dead_stock_df),
+        "description": "Total Dead Stock (All unsold parts in warehouse)"
     }
 
 @app.get("/calculate-date-range-dead-stock")
@@ -946,7 +944,7 @@ async def calculate_date_range_non_moving(
     location: Optional[str] = None,
     part_category: Optional[str] = None
 ):
-    """Calculate non-moving parts (dead stock) purchased in the date range but NOT sold (Only Location + Part Category filters)"""
+    """Calculate Dead Stock Within Date Range - Parts purchased in date range but NOT sold (Only Location + Part Category filters)"""
     if df is None:
         return {"total_value": 0, "count": 0}
     
@@ -1001,7 +999,7 @@ async def calculate_remaining_dead_stock(
     location: Optional[str] = None,
     part_category: Optional[str] = None
 ):
-    """Calculate all remaining dead stock (unsold parts) still in warehouse (Only Location + Part Category filters)"""
+    """Calculate Pending Dead Stock Within Date Range - Unsold parts with Last Purchase Date within date range (Only Location + Part Category filters)"""
     if df is None:
         return {"total_value": 0, "count": 0}
     
@@ -1024,13 +1022,25 @@ async def calculate_remaining_dead_stock(
         except:
             not_sold = filtered_df[last_issue_col].isna() | (filtered_df[last_issue_col].astype(str).str.strip() == '')
         
-        dead_stock_df = filtered_df[not_sold]
+        unsold_df = filtered_df[not_sold]
         
-        total_value = dead_stock_df[gndp_column].sum() if gndp_column in dead_stock_df.columns else 0
+        # If date range provided, filter by Last Purchase Date within range
+        if from_date and to_date:
+            from_date_obj = pd.to_datetime(from_date)
+            to_date_obj = pd.to_datetime(to_date)
+            
+            purchase_dates = pd.to_datetime(unsold_df[last_purchase_col].astype(str).str[:10], errors='coerce')
+            in_range = (purchase_dates >= from_date_obj) & (purchase_dates <= to_date_obj)
+            pending_dead_stock_df = unsold_df[in_range]
+        else:
+            pending_dead_stock_df = unsold_df
+        
+        total_value = pending_dead_stock_df[gndp_column].sum() if gndp_column in pending_dead_stock_df.columns else 0
         
         return {
             "total_value": total_value,
-            "count": len(dead_stock_df)
+            "count": len(pending_dead_stock_df),
+            "description": "Pending Dead Stock (Unsold parts within date range)"
         }
         
     except Exception as e:
