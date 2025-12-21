@@ -1018,6 +1018,234 @@ async def calculate_date_range_dead_stock(
         print(f"Error calculating date range dead stock: {e}")
         return {"total_dead_stock_value": 0, "count": 0, "error": str(e)}
 
+@app.get("/calculate-stock-upto-date")
+async def calculate_stock_upto_date(
+    to_date: Optional[str] = None,
+    movement_category: Optional[str] = None,
+    part_category: Optional[str] = None,
+    location: Optional[str] = None,
+    abc_category: Optional[str] = None,
+    ris: Optional[str] = None,
+    part_number: Optional[str] = None
+):
+    """Calculate stock value for items purchased UP TO the TO DATE (cumulative)"""
+    if df is None:
+        return {"total_stock_value": 0, "count": 0}
+    
+    if not to_date:
+        return {"total_stock_value": 0, "count": 0, "message": "to_date is required"}
+    
+    filtered_df = df.copy()
+    
+    # Apply non-date filters first
+    if movement_category:
+        categories_list = movement_category.split(',')
+        filtered_df = filtered_df[filtered_df['Movement Category P (2)'].isin(categories_list)]
+    
+    if part_category and part_category_col in filtered_df.columns:
+        categories_list = part_category.split(',')
+        filtered_df = filtered_df[filtered_df[part_category_col].isin(categories_list)]
+    
+    if location and location_col in filtered_df.columns:
+        locations_list = location.split(',')
+        filtered_df = filtered_df[filtered_df[location_col].isin(locations_list)]
+    
+    if abc_category and abc_col in filtered_df.columns:
+        categories_list = abc_category.split(',')
+        filtered_df = filtered_df[filtered_df[abc_col].isin(categories_list)]
+    
+    if ris and ris_col in filtered_df.columns:
+        ris_list = ris.split(',')
+        filtered_df = filtered_df[filtered_df[ris_col].isin(ris_list)]
+    
+    if part_number and part_no_col in filtered_df.columns:
+        filtered_df = filtered_df[filtered_df[part_no_col].astype(str).str.contains(part_number, case=False, na=False)]
+    
+    # Filter: Purchase date UP TO TO DATE (cumulative)
+    try:
+        to_date_obj = pd.to_datetime(to_date)
+        
+        # Convert purchase dates
+        purchase_dates = pd.to_datetime(filtered_df[last_purchase_col].astype(str).str[:10], errors='coerce')
+        
+        # Filter: Purchase date should be on or before TO DATE
+        purchase_upto_date = purchase_dates <= to_date_obj
+        filtered_df = filtered_df[purchase_upto_date]
+        
+        print(f"Stock Up To Date Calculation:")
+        print(f"  - Up to: {to_date_obj.date()}")
+        print(f"  - Found {len(filtered_df)} parts purchased up to this date")
+        
+    except Exception as e:
+        print(f"Date filtering error: {e}")
+    
+    # Calculate total stock value
+    total_stock_value = filtered_df[gndp_column].sum() if gndp_column in filtered_df.columns else 0
+    
+    return {
+        "total_stock_value": total_stock_value,
+        "count": len(filtered_df),
+        "up_to_date": to_date
+    }
+
+@app.get("/download-date-range-excel")
+async def download_date_range_excel(
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    movement_category: Optional[str] = None,
+    part_category: Optional[str] = None,
+    location: Optional[str] = None,
+    abc_category: Optional[str] = None,
+    ris: Optional[str] = None,
+    part_number: Optional[str] = None
+):
+    """
+    Download Excel file with 2 sheets:
+    - Sheet 1: Stock up to TO DATE
+    - Sheet 2: Dead stock (parts purchased last year, not sold)
+    """
+    if df is None:
+        return {"error": "Data not available"}
+    
+    if not to_date:
+        return {"error": "TO DATE is required"}
+    
+    # Sheet 1: Stock up to TO DATE
+    sheet1_df = df.copy()
+    
+    # Apply filters
+    if movement_category:
+        categories_list = movement_category.split(',')
+        sheet1_df = sheet1_df[sheet1_df['Movement Category P (2)'].isin(categories_list)]
+    
+    if part_category and part_category_col in sheet1_df.columns:
+        categories_list = part_category.split(',')
+        sheet1_df = sheet1_df[sheet1_df[part_category_col].isin(categories_list)]
+    
+    if location and location_col in sheet1_df.columns:
+        locations_list = location.split(',')
+        sheet1_df = sheet1_df[sheet1_df[location_col].isin(locations_list)]
+    
+    if abc_category and abc_col in sheet1_df.columns:
+        categories_list = abc_category.split(',')
+        sheet1_df = sheet1_df[sheet1_df[abc_col].isin(categories_list)]
+    
+    if ris and ris_col in sheet1_df.columns:
+        ris_list = ris.split(',')
+        sheet1_df = sheet1_df[sheet1_df[ris_col].isin(ris_list)]
+    
+    if part_number and part_no_col in sheet1_df.columns:
+        sheet1_df = sheet1_df[sheet1_df[part_no_col].astype(str).str.contains(part_number, case=False, na=False)]
+    
+    # Filter by date: UP TO TO DATE
+    try:
+        to_date_obj = pd.to_datetime(to_date)
+        purchase_dates = pd.to_datetime(sheet1_df[last_purchase_col].astype(str).str[:10], errors='coerce')
+        purchase_upto_date = purchase_dates <= to_date_obj
+        sheet1_df = sheet1_df[purchase_upto_date]
+    except Exception as e:
+        print(f"Error filtering sheet1 by date: {e}")
+    
+    # Format for export
+    sheet1_df = format_df_for_export(sheet1_df)
+    
+    # Sheet 2: Dead stock (only if FROM DATE is also provided)
+    if from_date:
+        sheet2_df = df.copy()
+        
+        # Apply same filters
+        if movement_category:
+            categories_list = movement_category.split(',')
+            sheet2_df = sheet2_df[sheet2_df['Movement Category P (2)'].isin(categories_list)]
+        
+        if part_category and part_category_col in sheet2_df.columns:
+            categories_list = part_category.split(',')
+            sheet2_df = sheet2_df[sheet2_df[part_category_col].isin(categories_list)]
+        
+        if location and location_col in sheet2_df.columns:
+            locations_list = location.split(',')
+            sheet2_df = sheet2_df[sheet2_df[location_col].isin(locations_list)]
+        
+        if abc_category and abc_col in sheet2_df.columns:
+            categories_list = abc_category.split(',')
+            sheet2_df = sheet2_df[sheet2_df[abc_col].isin(categories_list)]
+        
+        if ris and ris_col in sheet2_df.columns:
+            ris_list = ris.split(',')
+            sheet2_df = sheet2_df[sheet2_df[ris_col].isin(ris_list)]
+        
+        if part_number and part_no_col in sheet2_df.columns:
+            sheet2_df = sheet2_df[sheet2_df[part_no_col].astype(str).str.contains(part_number, case=False, na=False)]
+        
+        # Dead stock logic: Parts purchased LAST YEAR, not sold by TO DATE
+        try:
+            from_date_obj = pd.to_datetime(from_date)
+            to_date_obj = pd.to_datetime(to_date)
+            
+            # Calculate LAST YEAR's date range
+            last_year_from = from_date_obj - pd.DateOffset(years=1)
+            last_year_to = to_date_obj - pd.DateOffset(years=1)
+            
+            # Convert dates
+            purchase_dates = pd.to_datetime(sheet2_df[last_purchase_col].astype(str).str[:10], errors='coerce')
+            issue_dates = pd.to_datetime(sheet2_df[last_issue_col].astype(str).str[:10], errors='coerce')
+            
+            # Filter: Purchase date in LAST YEAR's range
+            purchase_in_last_year_range = (purchase_dates >= last_year_from) & (purchase_dates <= last_year_to)
+            
+            # Not sold: No issue date OR issue after TO DATE OR issue before purchase
+            no_issue_mask = issue_dates.isna()
+            issue_after_to_date = issue_dates > to_date_obj
+            issue_before_purchase = issue_dates < purchase_dates
+            not_sold_mask = no_issue_mask | issue_after_to_date | issue_before_purchase
+            
+            # Combine masks
+            dead_stock_mask = purchase_in_last_year_range & not_sold_mask
+            sheet2_df = sheet2_df[dead_stock_mask]
+            
+        except Exception as e:
+            print(f"Error filtering sheet2 by dead stock logic: {e}")
+        
+        # Format for export
+        sheet2_df = format_df_for_export(sheet2_df)
+    else:
+        # If no FROM DATE, create empty sheet2
+        sheet2_df = pd.DataFrame()
+    
+    # Create Excel file
+    current_datetime = datetime.now().strftime("%d-%m-%Y_%H-%M-%S")
+    locations_filter = location.split(',') if location and location.strip() else []
+    location_part = "_".join(locations_filter) if locations_filter else "All_Locations"
+    location_part = location_part.replace(" ", "_").replace("/", "-").replace("\\", "-")
+    
+    filename = f"DateRange_Analysis_{location_part}_{current_datetime}.xlsx"
+    reports_dir = "./Reports/Date_Range"
+    if not os.path.exists(reports_dir):
+        os.makedirs(reports_dir)
+    
+    output_path = os.path.join(reports_dir, filename)
+    
+    # Write to Excel with 2 sheets
+    with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
+        sheet1_df.to_excel(writer, sheet_name='Stock Up To Date', index=False)
+        if not sheet2_df.empty:
+            sheet2_df.to_excel(writer, sheet_name='Dead Stock', index=False)
+        else:
+            # Create empty sheet with message
+            pd.DataFrame({'Message': ['No FROM DATE provided - Dead Stock sheet is empty']}).to_excel(
+                writer, sheet_name='Dead Stock', index=False
+            )
+    
+    print(f"✓ Exported Excel file with 2 sheets:")
+    print(f"  - Sheet 1 (Stock Up To Date): {len(sheet1_df)} records")
+    print(f"  - Sheet 2 (Dead Stock): {len(sheet2_df) if not sheet2_df.empty else 0} records")
+    
+    return FileResponse(
+        path=output_path, 
+        filename=filename, 
+        media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+
 @app.get("/data")
 async def get_data(
     page: int = 1,
@@ -1053,6 +1281,7 @@ async def get_data(
         "total_records": total_records,
         "total_pages": total_pages
     }
+
 
 @app.get("/location-part-category-summary")
 async def get_location_part_category_summary(
