@@ -2,11 +2,17 @@ services:
   - type: web
     name: spare-parts-dashboard
     runtime: python
-    pythonVersion: 3.13
-    buildCommand: "pip install -r requirements.txt"
-    startCommand: "gunicorn -w 1 -k uvicorn.workers.UvicornWorker app:app"
+    pythonVersion: 3.12  # Changed from 3.13 to match your version
+    buildCommand: "pip install --no-cache-dir -r requirements.txt"
+    startCommand: "gunicorn -w 2 -k uvicorn.workers.UvicornWorker app:app --timeout 120 --log-level info"
     envVars:
       - key: PORT
         value: "8000"
       - key: PYTHONUNBUFFERED
         value: "true"
+      - key: WEB_CONCURRENCY
+        value: "2"
+    # Health check configuration
+    healthCheckPath: /health
+    # Resource limits (adjust as needed for your plan)
+    plan: starter  # or free, depending on your Render plan
