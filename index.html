@@ -447,17 +447,11 @@
                             <div class="value" id="dateRangeDeadStockValue">0</div>
                         </div>
                     </div>
-                    <div class="col-md-1 d-flex align-items-end">
-                        <button class="btn btn-success w-100" id="exportDateRangeExcel" title="Export to Excel">
-                            <i class="bi bi-file-earmark-excel"></i>
-                        </button>
-                    </div>
                 </div>
                 <small class="text-white mt-2 d-block">
                     <i class="bi bi-info-circle"></i> <strong>Date Range Cards:</strong> 
                     📅 Stock purchased up to TO DATE | 
-                    💀 Parts purchased LAST YEAR (same period) that are still unsold |
-                    <i class="bi bi-file-earmark-excel"></i> Excel: Both sheets in one file
+                    💀 Parts purchased LAST YEAR (same period) that are still unsold
                 </small>
             </div>
         </div>
@@ -1155,87 +1149,6 @@
                 const filters = getFilters();
                 const queryString = buildQueryStringNoDate(filters);
                 window.location.href = `/download-last-month-liquidation-csv?${queryString}`;
-            });
-            
-            // ✅ FIXED: Excel export for date range (2 sheets) with better error handling
-            $('#exportDateRangeExcel').click(function() {
-                const filters = getFilters();
-                
-                if (!filters.toDate) {
-                    alert('❌ Please select TO DATE to export Excel file');
-                    return;
-                }
-                
-                console.log('📊 Starting Excel export with filters:', filters);
-                
-                // Build query string with proper encoding
-                let queryParts = [];
-                
-                if (filters.movementCategory && filters.movementCategory.length > 0) {
-                    queryParts.push('movement_category=' + encodeURIComponent(filters.movementCategory.join(',')));
-                }
-                if (filters.partCategory && filters.partCategory.length > 0) {
-                    queryParts.push('part_category=' + encodeURIComponent(filters.partCategory.join(',')));
-                }
-                if (filters.location && filters.location.length > 0) {
-                    queryParts.push('location=' + encodeURIComponent(filters.location.join(',')));
-                }
-                if (filters.abcCategory && filters.abcCategory.length > 0) {
-                    queryParts.push('abc_category=' + encodeURIComponent(filters.abcCategory.join(',')));
-                }
-                if (filters.ris && filters.ris.length > 0) {
-                    queryParts.push('ris=' + encodeURIComponent(filters.ris.join(',')));
-                }
-                if (filters.partNumber) {
-                    queryParts.push('part_number=' + encodeURIComponent(filters.partNumber));
-                }
-                if (filters.fromDate) {
-                    queryParts.push('from_date=' + encodeURIComponent(filters.fromDate));
-                }
-                queryParts.push('to_date=' + encodeURIComponent(filters.toDate));
-                
-                const queryString = queryParts.join('&');
-                const url = `/download-date-range-excel?${queryString}`;
-                
-                console.log('🔗 Export URL:', url);
-                
-                // Show loading message
-                const originalText = $(this).text();
-                $(this).html('⏳ Generating...').prop('disabled', true);
-                const btn = this;
-                
-                // Use fetch to verify response before downloading
-                fetch(url)
-                    .then(response => {
-                        console.log('📦 Response status:', response.status);
-                        console.log('📦 Content-Type:', response.headers.get('content-type'));
-                        
-                        if (response.status === 200) {
-                            console.log('✅ File generated, triggering download...');
-                            window.location.href = url;
-                            
-                            // Reset button after download starts
-                            setTimeout(() => {
-                                $(btn).html(originalText).prop('disabled', false);
-                            }, 2000);
-                        } else if (response.status === 400 || response.status === 404 || response.status === 500) {
-                            // Server error
-                            return response.json().then(data => {
-                                console.error('❌ Error response:', data);
-                                alert(`❌ Export Error:\n${data.error || 'Server error'}`);
-                                $(btn).html(originalText).prop('disabled', false);
-                            });
-                        } else {
-                            console.error('❌ Unexpected status code:', response.status);
-                            alert(`❌ Export Error: Server returned status ${response.status}`);
-                            $(btn).html(originalText).prop('disabled', false);
-                        }
-                    })
-                    .catch(error => {
-                        console.error('❌ Fetch error:', error);
-                        alert(`❌ Export Error: ${error.message}`);
-                        $(btn).html(originalText).prop('disabled', false);
-                    });
             });
         }
     </script>
